@@ -543,6 +543,11 @@ struct CalibHessian {
     sg_scaled.tail(2) *= SCALE_G;
   }
 
+  inline void setScaleScaled(double new_scale_scaled) {
+    sg_scaled[0] *= new_scale_scaled;
+    sg[0] = new_scale_scaled / SCALE_SCALE;
+  }
+
   inline double getScaleScaled(bool use_state_zero = false) {
     return use_state_zero ? (sg_zero[0] * SCALE_SCALE) : sg_scaled[0];
   }

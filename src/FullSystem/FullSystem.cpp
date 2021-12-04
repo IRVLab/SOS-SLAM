@@ -544,9 +544,6 @@ void FullSystem::activatePointsMT() {
     if (newpoint != 0 && newpoint != (PointHessian *)((long)(-1))) {
       newpoint->host->immaturePoints[ph->idxInImmaturePoints] = 0;
       newpoint->host->pointHessians.push_back(newpoint);
-      // rescale the depth
-      newpoint->setIdepth(newpoint->idepth / new_scale_);
-      newpoint->setIdepthZero(newpoint->idepth);
       ef->insertPoint(newpoint);
       for (PointFrameResidual *r : newpoint->residuals)
         ef->insertResidual(r);
@@ -930,9 +927,9 @@ void FullSystem::makeKeyFrame(FrameHessian *fh) {
   }
 
   // scale optimization
-  new_scale_ = optimizeScale(coarse_tracker_for_new_kf_);
-  if (new_scale_ < 0) {
-    new_scale_ = 1.0;
+  double new_scale = optimizeScale(coarse_tracker_for_new_kf_);
+  if (new_scale > 0) {
+    HCalib.setScaleScaled(new_scale);
   }
 
   // debugPlot("post Optimize");
@@ -1083,7 +1080,6 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
   }
 
   initialized = true;
-  new_scale_ = 1.0;
   printf("INITIALIZE FROM INITIALIZER (%d pts)!\n",
          (int)firstFrame->pointHessians.size());
 }

@@ -257,7 +257,7 @@ void VioNode::imageMessageCallback(const sensor_msgs::ImageConstPtr &msg0,
               .count());
 
       // reinitialize if necessary
-      if (full_system_->initFailed && incoming_id_ < 250) {
+      if (full_system_->initFailed) {
         std::vector<IOWrap::Output3DWrapper *> wraps =
             full_system_->outputWrapper;
         delete full_system_;
@@ -331,9 +331,13 @@ int main(int argc, char **argv) {
   double td_cam_imu;
   nhPriv.param("timeshift_cam_imu", td_cam_imu, 0.0);
   nhPriv.param("weight_imu_dso", setting_weight_imu_dso, 1.0);
+  setting_enable_imu = setting_weight_imu_dso > 0;
 
   float scale_opt_thres;
   nhPriv.param("scale_opt_thres", scale_opt_thres, 10.0f);
+  if (scale_opt_thres > 0) {
+    setting_estimate_scale = false;
+  }
 
   // read from a bag file
   std::string bag_path;

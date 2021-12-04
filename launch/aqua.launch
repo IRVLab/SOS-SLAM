@@ -1,0 +1,21 @@
+<launch>
+  <arg name="start_frame" default="0"/>
+  <arg name="bag" default="/home/jiawei/Workspace/data/Aqua/s1-back-forth.bag"/>
+  <arg name="results" default="$(env HOME)/Desktop/results.txt"/>
+
+  <rosparam command="load" file="$(find spline_vio)/calibs/Aqua/calib.yaml" ns="spline_vio"/>
+
+  <node name="spline_vio" pkg="spline_vio" type="spline_vio_node" output="screen" required="true">
+    <param name="imu_topic" value="/aqua/imu" />
+    <param name="cam0_topic" value="/camera_front_left/image_raw" />
+    <param name="cam1_topic" value="/camera_front_right/image_raw" />
+    <param name="calib0" value="$(find spline_vio)/calibs/Aqua/camera0.txt" />
+    <param name="calib1" value="$(find spline_vio)/calibs/Aqua/camera1.txt" />
+    <param name="scale_opt_thres" value="15" />
+    <param name="bag" value="$(arg bag)" />
+    <param name="start_frame" value="$(arg start_frame)" />
+    <param name="results" value="$(arg results)" />
+    <!-- <param name="nogui" value="true" /> -->
+    <param name="weight_imu_dso" value="6" />
+  </node>
+  </launch>

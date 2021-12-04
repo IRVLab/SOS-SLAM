@@ -1,6 +1,6 @@
 <launch>
-  <arg name="start_frame" default="1050"/>
-  <arg name="bag" default="/home/jiawei/Workspace/data/EuRoC/MH_01_easy.bag"/>
+  <arg name="start_frame" default="0"/>
+  <arg name="bag" default="/home/jiawei/Workspace/data/EuRoC/v22.bag"/>
   <arg name="results" default="$(env HOME)/Desktop/results.txt"/>
 
   <!-- <arg name="bag" default="$(env HOME)/Workspace/data/EuRoC/mh1.bag"/>
@@ -14,7 +14,7 @@
     <param name="cam1_topic" value="/cam1/image_raw" />
     <param name="calib0" value="$(find spline_vio)/calibs/EuRoC/camera0.txt" />
     <param name="calib1" value="$(find spline_vio)/calibs/EuRoC/camera1.txt" />
-    <!-- <param name="scale_opt_thres" value="-1" /> -->
+    <param name="scale_opt_thres" value="12" />
     <param name="bag" value="$(arg bag)" />
     <param name="start_frame" value="$(arg start_frame)" />
     <param name="results" value="$(arg results)" />

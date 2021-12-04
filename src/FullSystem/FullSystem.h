@@ -275,7 +275,6 @@ private:
   /* ========================= Scale optimization ========================== */
   FrameHessian *fh1_;
   float scale_opt_thres_;
-  float new_scale_;
   void setStereoFrame(ImageAndExposure *image1, int incoming_id);
   float optimizeScale(ScaleOptimizer *scale_optimizer);
 };

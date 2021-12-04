@@ -775,6 +775,9 @@ void EnergyFunctional::marginalizeFrame(EFFrame *fh, CalibHessian *HCalib) {
     VecX delta2 = VecX::Zero(dim);
     delta2.head(CPARS) = delta.head(CPARS);
     delta2.segment<3>(CPARS) = HCalib->sg - HCalib->sg_zero;
+    if (!setting_estimate_scale) {
+      delta2(CPARS) = 0;
+    }
     // connection from fh->idx to fh->idx+1
     getImuHessianCurrentFrame(fh->idx + 1, HCalib, HM_change, bM_change,
                               spline_valid, J_cst, r_cst, false);
@@ -1095,6 +1098,9 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
       VecX delta2 = VecX::Zero(dim);
       delta2.head(CPARS) = delta.head(CPARS);
       delta2.segment<3>(CPARS) = HCalib->sg - HCalib->sg_zero;
+      if (!setting_estimate_scale) {
+        delta2(CPARS) = 0;
+      }
       for (int i = 0; i < nFrames; i++) {
         delta2.segment<8>(CPARS + 3 + 29 * i) = delta.segment<8>(CPARS + 8 * i);
         if (HCalib->scale_trapped) {

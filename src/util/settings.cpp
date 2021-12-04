@@ -182,7 +182,7 @@ int sparsityFactor =
     5; // not actually a setting, only some legacy stuff for coarse initializer.
 
 bool setting_enable_imu = true;
-bool setting_estimate_scale = false;
+bool setting_estimate_scale = true;
 bool setting_print_imu = true;
 
 int setting_min_g_imu = 40;         // minimal # of imu data for gravity est.
