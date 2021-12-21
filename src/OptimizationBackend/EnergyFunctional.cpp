@@ -440,8 +440,8 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
     }
   }
   if (print) {
-    printf("id: %d ba: %5.2f %5.2f %5.2f bg: %5.2f %5.2f %5.2f ",
-           cur_fh->frameID, cur_fh->imu_bias[0], cur_fh->imu_bias[1],
+    printf("id: %d dt: %4.2f ba: %5.2f %5.2f %5.2f bg: %5.2f %5.2f %5.2f ",
+           cur_fh->frameID, -tpf, cur_fh->imu_bias[0], cur_fh->imu_bias[1],
            cur_fh->imu_bias[2], cur_fh->imu_bias[3], cur_fh->imu_bias[4],
            cur_fh->imu_bias[5]);
     if (spline_valid) {
@@ -774,7 +774,9 @@ void EnergyFunctional::marginalizeFrame(EFFrame *fh, CalibHessian *HCalib) {
     VecX delta = getStitchedDeltaF();
     VecX delta2 = VecX::Zero(dim);
     delta2.head(CPARS) = delta.head(CPARS);
-    delta2.segment<3>(CPARS) = HCalib->sg - HCalib->sg_zero;
+    if (setting_g_norm * setting_g_norm > 0.1) {
+      delta2.segment<3>(CPARS) = HCalib->sg - HCalib->sg_zero;
+    }
     if (!setting_estimate_scale) {
       delta2(CPARS) = 0;
     }
@@ -1097,7 +1099,9 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
     if (setting_enable_imu) {
       VecX delta2 = VecX::Zero(dim);
       delta2.head(CPARS) = delta.head(CPARS);
-      delta2.segment<3>(CPARS) = HCalib->sg - HCalib->sg_zero;
+      if (setting_g_norm * setting_g_norm > 0.1) {
+        delta2.segment<3>(CPARS) = HCalib->sg - HCalib->sg_zero;
+      }
       if (!setting_estimate_scale) {
         delta2(CPARS) = 0;
       }
@@ -1137,7 +1141,7 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
 
     /***************** remove unconstraint states **********************/
     int vi = CPARS + setting_estimate_scale;
-    if (HCalib->scale_trapped) {
+    if ((setting_g_norm * setting_g_norm > 0.1) && (HCalib->scale_trapped)) {
       HFinal_top.block(0, vi, dim, 2) =
           HFinal_top.block(0, CPARS + 1, dim, 2).eval();
       HFinal_top.block(vi, 0, 2, dim) =
@@ -1189,7 +1193,7 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
       HCalib->sg_step[0] = -x(vi);
       vi += 1;
     }
-    if (HCalib->scale_trapped) {
+    if ((setting_g_norm * setting_g_norm > 0.1) && (HCalib->scale_trapped)) {
       HCalib->sg_step.tail(2) = -x.segment<2>(vi);
       vi += 2;
     }

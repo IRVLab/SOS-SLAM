@@ -11,11 +11,12 @@
     <param name="cam1_topic" value="/camera_front_right/image_raw" />
     <param name="calib0" value="$(find spline_vio)/calibs/Aqua/camera0.txt" />
     <param name="calib1" value="$(find spline_vio)/calibs/Aqua/camera1.txt" />
-    <param name="scale_opt_thres" value="15" />
+    <param name="scale_opt_thres" value="12" />
     <param name="bag" value="$(arg bag)" />
     <param name="start_frame" value="$(arg start_frame)" />
     <param name="results" value="$(arg results)" />
     <!-- <param name="nogui" value="true" /> -->
-    <param name="weight_imu_dso" value="6" />
+    <param name="weight_imu_dso" value="-1" />
+    <param name="g_norm" value="0" />
   </node>
   </launch>

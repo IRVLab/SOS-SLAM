@@ -31,7 +31,7 @@
 #endif
 
 #define DEBUG_PRINT false
-#define DEBUG_PLOT false
+#define DEBUG_PLOT true
 
 namespace dso {
 

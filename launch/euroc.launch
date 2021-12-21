@@ -1,10 +1,7 @@
 <launch>
   <arg name="start_frame" default="0"/>
-  <arg name="bag" default="/home/jiawei/Workspace/data/EuRoC/v22.bag"/>
+  <arg name="bag" default="/home/jiawei/Workspace/data/EuRoC/mh1.bag"/>
   <arg name="results" default="$(env HOME)/Desktop/results.txt"/>
-
-  <!-- <arg name="bag" default="$(env HOME)/Workspace/data/EuRoC/mh1.bag"/>
-  <arg name="results" default="$(env HOME)/Workspace/spline_vio_tests/results/SplineVIO/mh1.txt"/> -->
 
   <rosparam command="load" file="$(find spline_vio)/calibs/EuRoC/calib.yaml" ns="spline_vio"/>
 

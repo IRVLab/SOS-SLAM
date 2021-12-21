@@ -1033,31 +1033,35 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
   firstToNew.translation() *= init_scale;
 
   // align w.r.t. gravity
-  Vec3 g_imu = Vec3::Zero(); // gravity in imu frame
-  printf("Gravity direction estimated from %d imu data.\n", setting_min_g_imu);
-  assert(firstFrame->imu_data.size() >= setting_min_g_imu);
-  int imu_count = 0;
-  for (const ImuData &d : firstFrame->imu_data) {
-    g_imu = g_imu + d.acc;
-    imu_count++;
-    if (imu_count >= setting_min_g_imu) {
-      break;
+  Mat33 rot_w_i0 = Mat33::Identity();
+  if (setting_g_norm * setting_g_norm > 0.1) {
+    Vec3 g_imu = Vec3::Zero(); // gravity in imu frame
+    printf("Gravity direction estimated from %d imu data.\n",
+           setting_min_g_imu);
+    assert(firstFrame->imu_data.size() >= setting_min_g_imu);
+    int imu_count = 0;
+    for (const ImuData &d : firstFrame->imu_data) {
+      g_imu = g_imu + d.acc;
+      imu_count++;
+      if (imu_count >= setting_min_g_imu) {
+        break;
+      }
     }
+    g_imu.normalize();
+
+    Vec3 sg0;
+    sg0 << 1, 0, 0;
+    HCalib.setSgZero(sg0);
+
+    Vec3 g_world = HCalib.getG().normalized();
+    Vec3 rot = SO3::hat(g_imu) * g_world;
+    double sin_theta = rot.norm();
+    double cos_theta = g_imu.dot(g_world);
+    Vec3 axis = rot.normalized();
+    rot_w_i0 = cos_theta * Mat33::Identity() +
+               (1 - cos_theta) * axis * axis.transpose() +
+               sin_theta * SO3::hat(axis);
   }
-  g_imu.normalize();
-
-  Vec3 sg0;
-  sg0 << 1, 0, 0;
-  HCalib.setSgZero(sg0);
-
-  Vec3 g_world = HCalib.getG().normalized();
-  Vec3 rot = SO3::hat(g_imu) * g_world;
-  double sin_theta = rot.norm();
-  double cos_theta = g_imu.dot(g_world);
-  Vec3 axis = rot.normalized();
-  Mat33 rot_w_i0 = cos_theta * Mat33::Identity() +
-                   (1 - cos_theta) * axis * axis.transpose() +
-                   sin_theta * SO3::hat(axis);
   Mat33 rot_w_c0 = rot_w_i0 * setting_rot_imu_cam;
   SE3 tfm_w_c0(rot_w_c0, Vec3::Zero());
 

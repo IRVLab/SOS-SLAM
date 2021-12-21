@@ -331,6 +331,7 @@ int main(int argc, char **argv) {
   double td_cam_imu;
   nhPriv.param("timeshift_cam_imu", td_cam_imu, 0.0);
   nhPriv.param("weight_imu_dso", setting_weight_imu_dso, 1.0);
+  nhPriv.param("g_norm", setting_g_norm, -9.80665);
   setting_enable_imu = setting_weight_imu_dso > 0;
 
   float scale_opt_thres;
@@ -378,7 +379,6 @@ int main(int argc, char **argv) {
     rosbag::View view(bag, rosbag::TopicQuery(topics));
 
     sensor_msgs::ImageConstPtr img0, img1;
-    bool img0_updated(false), img1_updated(false);
     BOOST_FOREACH (rosbag::MessageInstance const m, view) {
       if (vio_node.isLost) {
         break;
@@ -389,17 +389,15 @@ int main(int argc, char **argv) {
       }
       if (m.getTopic() == cam0_topic) {
         img0 = m.instantiate<sensor_msgs::Image>();
-        img0_updated = true;
       }
       if (m.getTopic() == cam1_topic) {
         img1 = m.instantiate<sensor_msgs::Image>();
-        img1_updated = true;
       }
-      if (img0_updated && img1_updated) {
-        assert(fabs(img0->header.stamp.toSec() - img1->header.stamp.toSec()) <
-               0.1);
+      if (img0 && img1 &&
+          fabs(img0->header.stamp.toSec() - img1->header.stamp.toSec()) < 0.1) {
         vio_node.imageMessageCallback(img0, img1);
-        img0_updated = img1_updated = false;
+        img0 = nullptr;
+        img1 = nullptr;
       }
     }
     bag.close();
