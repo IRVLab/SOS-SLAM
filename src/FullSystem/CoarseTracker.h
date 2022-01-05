@@ -92,8 +92,8 @@ public:
   void addIntoDistFinal(int u, int v);
 
 private:
-  int w_[PYR_LEVELS];
-  int h_[PYR_LEVELS];
+  int w[PYR_LEVELS];
+  int h[PYR_LEVELS];
 
   PointFrameResidual **coarseProjectionGrid;
   int *coarseProjectionGridnum;

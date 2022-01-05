@@ -1,0 +1,23 @@
+# transformation of the main camera in IMU frame
+T_imu:
+  cols: 4
+  rows: 4
+  data: [0.0,  0.0, 1.0, 0.0, 
+        -1.0,  0.0, 0.0, 0.0,
+         0.0, -1.0, 0.0, 0.0,
+         0.0,  0.0, 0.0, 1.0]
+
+rate_hz: 200
+accelerometer_noise_density: 1.7e-2  # [ m / s^2 / sqrt(Hz) ]  
+accelerometer_random_walk: 0.001     # [ m / s^3 / sqrt(Hz) ].  ( accel bias diffusion )
+gyroscope_noise_density: 2.0e-4      # [ rad / s / sqrt(Hz) ] 
+gyroscope_random_walk: 0.0000008     # [ rad / s^2 / sqrt(Hz) ] ( gyro bias diffusion )
+
+# transformation of the main camera in the other camera frame
+T_stereo:
+  cols: 4
+  rows: 4
+  data: [1.0, 0.0, 0.0, -0.2, 
+         0.0, 1.0, 0.0, 0.0,
+         0.0, 0.0, 1.0, 0.0,
+         0.0, 0.0, 0.0, 1.0]

@@ -45,7 +45,7 @@ public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
   ScaleOptimizer(int w, int h, const std::vector<double> &tfm_vec,
-                   const Mat33f &K1);
+                 const Mat33f &K1);
   ~ScaleOptimizer();
 
   void makeK(CalibHessian *HCalib);
@@ -53,26 +53,26 @@ public:
   float optimizeScale(FrameHessian *fh1, float &scale, int coarsestLvl);
 
 protected:
-  std::vector<float *> ptr_to_delete_;
+  std::vector<float *> ptrToDelete;
 
-  float *idepth_[PYR_LEVELS];
-  float *weight_sums_[PYR_LEVELS];
-  float *weight_sums_bak_[PYR_LEVELS];
+  float *idepth[PYR_LEVELS];
+  float *weight_sums[PYR_LEVELS];
+  float *weight_sums_bak[PYR_LEVELS];
 
-  Mat33f Ki_[PYR_LEVELS];
-  float fx_[PYR_LEVELS];
-  float fy_[PYR_LEVELS];
-  float cx_[PYR_LEVELS];
-  float cy_[PYR_LEVELS];
-  int w_[PYR_LEVELS];
-  int h_[PYR_LEVELS];
+  Mat33f Ki[PYR_LEVELS];
+  float fx[PYR_LEVELS];
+  float fy[PYR_LEVELS];
+  float cx[PYR_LEVELS];
+  float cy[PYR_LEVELS];
+  int w[PYR_LEVELS];
+  int h[PYR_LEVELS];
 
   // pc buffers
-  float *pc_u_[PYR_LEVELS];
-  float *pc_v_[PYR_LEVELS];
-  float *pc_idepth_[PYR_LEVELS];
-  float *pc_color_[PYR_LEVELS];
-  int pc_n_[PYR_LEVELS];
+  float *pc_u[PYR_LEVELS];
+  float *pc_v[PYR_LEVELS];
+  float *pc_idepth[PYR_LEVELS];
+  float *pc_color[PYR_LEVELS];
+  int pc_n[PYR_LEVELS];
 
   /**************************Scale Optimization***************************/
   void calcGSSSEScale(int lvl, float &H_out, float &b_out, float scale);
@@ -80,27 +80,27 @@ protected:
                     bool plot_img = false);
 
   // Transformation from frame0 to frame1
-  SE3 tfm_f1_f0_;
+  SE3 tfmF0ToF1;
 
   // cam1 params
-  float fx1_[PYR_LEVELS];
-  float fy1_[PYR_LEVELS];
-  float cx1_[PYR_LEVELS];
-  float cy1_[PYR_LEVELS];
+  float fx1[PYR_LEVELS];
+  float fy1[PYR_LEVELS];
+  float cx1[PYR_LEVELS];
+  float cy1[PYR_LEVELS];
 
   // warped buffers
-  float *scale_buf_warped_rx1_;
-  float *scale_buf_warped_rx2_;
-  float *scale_buf_warped_rx3_;
-  float *scale_buf_warped_dx_;
-  float *scale_buf_warped_dy_;
-  float *scale_buf_warped_residual_;
-  float *scale_buf_warped_weight_;
-  float *scale_buf_warped_ref_color_;
-  int scale_buf_warped_n_;
+  float *scaleBufWarped_rx1;
+  float *scaleBufWarped_rx2;
+  float *scaleBufWarped_rx3;
+  float *scaleBufWarped_dx;
+  float *scaleBufWarped_dy;
+  float *scaleBufWarped_residual;
+  float *scaleBufWarped_weight;
+  float *scaleBufWarped_ref_color;
+  int scaleBufWarped_n;
 
-  FrameHessian *fh1_;
-  ScaleAccumulator scale_acc_;
+  FrameHessian *fhStereo;
+  ScaleAccumulator scaleAcc;
 };
 
 } // namespace dso

@@ -56,13 +56,13 @@ int PointHessian::instanceCounter = 0;
 int CalibHessian::instanceCounter = 0;
 
 FullSystem::FullSystem(const std::vector<double> &tfm_stereo, const Mat33f &K1,
-                       float scale_opt_thres)
-    : scale_opt_thres_(scale_opt_thres) {
+                       int prev_kf_size)
+    : prevKFSize(prev_kf_size) {
   selectionMap = new float[wG[0] * hG[0]];
 
   coarseDistanceMap = new CoarseDistanceMap(wG[0], hG[0]);
-  coarse_tracker_ = new CoarseTracker(wG[0], hG[0], tfm_stereo, K1);
-  coarse_tracker_for_new_kf_ = new CoarseTracker(wG[0], hG[0], tfm_stereo, K1);
+  coarseTracker = new CoarseTracker(wG[0], hG[0], tfm_stereo, K1);
+  coarseTrackerForNewKF = new CoarseTracker(wG[0], hG[0], tfm_stereo, K1);
   coarseInitializer = new CoarseInitializer(wG[0], hG[0], tfm_stereo, K1);
   pixelSelector = new PixelSelector(wG[0], hG[0]);
 
@@ -85,11 +85,14 @@ FullSystem::FullSystem(const std::vector<double> &tfm_stereo, const Mat33f &K1,
 
   isLost = false;
   initFailed = false;
+  scaleTrapped = false;
 
   minIdJetVisDebug = -1;
   maxIdJetVisDebug = -1;
   minIdJetVisTracker = -1;
   maxIdJetVisTracker = -1;
+
+  curPose = SE3();
 }
 
 FullSystem::~FullSystem() {
@@ -99,8 +102,8 @@ FullSystem::~FullSystem() {
     delete s;
 
   delete coarseDistanceMap;
-  delete coarse_tracker_;
-  delete coarse_tracker_for_new_kf_;
+  delete coarseTracker;
+  delete coarseTrackerForNewKF;
   delete coarseInitializer;
   delete pixelSelector;
   delete ef;
@@ -182,7 +185,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian *fh) {
   for (IOWrap::Output3DWrapper *ow : outputWrapper)
     ow->pushLiveFrame(fh);
 
-  FrameHessian *lastF = coarse_tracker_->lastRef;
+  FrameHessian *lastF = coarseTracker->lastRef;
 
   AffLight aff_last_2_l = AffLight(0, 0);
 
@@ -267,7 +270,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian *fh) {
     AffLight aff_g2l_this = aff_last_2_l;
     SE3 lastF_2_fh_this = lastF_2_fh_tries[i];
     Vec5 currentRes;
-    bool trackingIsGood = coarse_tracker_->trackNewestCoarse(
+    bool trackingIsGood = coarseTracker->trackNewestCoarse(
         fh, lastF_2_fh_this, aff_g2l_this, pyrLevelsUsed - 1, achievedRes,
         currentRes); // in each level has to be at least as good as the last
                      // try.
@@ -287,7 +290,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian *fh) {
         !(currentRes[0] >= achievedRes[0])) {
       // printf("take over. minRes %f -> %f!\n", achievedRes[0],
       // currentRes[0]);
-      flowVecs = coarse_tracker_->lastFlowIndicators;
+      flowVecs = coarseTracker->lastFlowIndicators;
       aff_g2l = aff_g2l_this;
       lastF_2_fh = lastF_2_fh_this;
       haveOneGood = true;
@@ -337,8 +340,8 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian *fh) {
   fh->shell->camToWorld =
       fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
 
-  if (coarse_tracker_->firstCoarseRMSE < 0)
-    coarse_tracker_->firstCoarseRMSE = achievedRes[0];
+  if (coarseTracker->firstCoarseRMSE < 0)
+    coarseTracker->firstCoarseRMSE = achievedRes[0];
 
   if (!setting_debugout_runquiet)
     printf("Coarse Tracker tracked ab = %f %f (exp %f). Res %f!\n", aff_g2l.a,
@@ -446,7 +449,7 @@ void FullSystem::activatePointsMT() {
   coarseDistanceMap->makeK(&HCalib);
   coarseDistanceMap->makeDistanceMap(frameHessians, newestHs);
 
-  // coarse_tracker_->debugPlotDistMap("distMap");
+  // coarseTracker->debugPlotDistMap("distMap");
 
   std::vector<ImmaturePoint *> toOptimize;
   toOptimize.reserve(20000);
@@ -711,16 +714,16 @@ void FullSystem::addActiveFrame(const std::vector<Vec7> &new_imu_data,
   } else // do front-end operation.
   {
     // SWAP tracking reference?.
-    if (coarse_tracker_for_new_kf_->refFrameID > coarse_tracker_->refFrameID) {
+    if (coarseTrackerForNewKF->refFrameID > coarseTracker->refFrameID) {
       boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
-      CoarseTracker *tmp = coarse_tracker_;
-      coarse_tracker_ = coarse_tracker_for_new_kf_;
-      coarse_tracker_for_new_kf_ = tmp;
+      CoarseTracker *tmp = coarseTracker;
+      coarseTracker = coarseTrackerForNewKF;
+      coarseTrackerForNewKF = tmp;
     }
 
     if (setting_enable_imu && HCalib.imu_initialized) {
       fh->propagateImuState(allFrameHistory[allFrameHistory.size() - 2],
-                            coarse_tracker_->lastRef->imu_bias, &HCalib);
+                            coarseTracker->lastRef->imu_bias, &HCalib);
     }
 
     Vec4 tres = trackNewCoarse(fh);
@@ -743,8 +746,8 @@ void FullSystem::addActiveFrame(const std::vector<Vec7> &new_imu_data,
               0.95f / setting_keyframesPerSecond;
     } else {
       Vec2 refToFh = AffLight::fromToVecExposure(
-          coarse_tracker_->lastRef->ab_exposure, fh->ab_exposure,
-          coarse_tracker_->lastRef_aff_g2l, fh->shell->aff_g2l);
+          coarseTracker->lastRef->ab_exposure, fh->ab_exposure,
+          coarseTracker->lastRef_aff_g2l, fh->shell->aff_g2l);
 
       // BRIGHTNESS CHECK
       needToMakeKF = allFrameHistory.size() == 1 ||
@@ -757,11 +760,13 @@ void FullSystem::addActiveFrame(const std::vector<Vec7> &new_imu_data,
                              setting_kfGlobalWeight * setting_maxAffineWeight *
                                  fabs(logf((float)refToFh[0])) >
                          1 ||
-                     2 * coarse_tracker_->firstCoarseRMSE < tres[0];
+                     2 * coarseTracker->firstCoarseRMSE < tres[0];
     }
 
     for (IOWrap::Output3DWrapper *ow : outputWrapper)
       ow->publishCamPose(fh->shell, &HCalib);
+
+    curPose = fh->shell->camToWorld;
 
     if (needToMakeKF) {
       setStereoFrame(image1, incoming_id);
@@ -773,7 +778,7 @@ void FullSystem::addActiveFrame(const std::vector<Vec7> &new_imu_data,
   }
 }
 void FullSystem::deliverTrackedFrame(FrameHessian *fh, bool needKF) {
-  if (goStepByStep && lastRefStopID != coarse_tracker_->refFrameID) {
+  if (goStepByStep && lastRefStopID != coarseTracker->refFrameID) {
     MinimalImageF3 img(wG[0], hG[0], fh->dI);
     IOWrap::displayImage("frameToTrack", &img);
     while (true) {
@@ -782,7 +787,7 @@ void FullSystem::deliverTrackedFrame(FrameHessian *fh, bool needKF) {
         break;
       handleKey(k);
     }
-    lastRefStopID = coarse_tracker_->refFrameID;
+    lastRefStopID = coarseTracker->refFrameID;
   } else
     handleKey(IOWrap::waitKey(1));
 
@@ -829,11 +834,12 @@ void FullSystem::makeKeyFrame(FrameHessian *fh) {
   imu_data.clear();
   if (setting_enable_imu && HCalib.imu_initialized) {
     fh->propagateImuState(allKeyFramesHistory.back(),
-                          coarse_tracker_->lastRef->imu_bias, &HCalib);
+                          coarseTracker->lastRef->imu_bias, &HCalib);
   }
   fh->idx = frameHessians.size();
   frameHessians.push_back(fh);
-  fh->frameID = allKeyFramesHistory.size();
+  fh->frameID = allKeyFramesHistory.size() + prevKFSize;
+  ;
   allKeyFramesHistory.push_back(fh->shell);
   ef->insertFrame(fh, &HCalib);
 
@@ -863,7 +869,6 @@ void FullSystem::makeKeyFrame(FrameHessian *fh) {
 
   // imu initialization
   if (setting_enable_imu && allKeyFramesHistory.size() == 5) {
-    assert(frameHessians.size() == 5);
     boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
     if (!FrameHessian::initializeImu(frameHessians, &HCalib)) {
       initFailed = true;
@@ -906,8 +911,8 @@ void FullSystem::makeKeyFrame(FrameHessian *fh) {
   // REMOVE OUTLIER
   removeOutliers();
 
-  // reset imu states for initialization
   if (setting_enable_imu && allKeyFramesHistory.size() == 5) {
+    // reset imu states for imu initialization
     for (int i = 0; i < frameHessians.size(); i++) {
       frameHessians[i]->setImuStateZero(&HCalib);
       if (i > 0) {
@@ -918,16 +923,16 @@ void FullSystem::makeKeyFrame(FrameHessian *fh) {
 
   {
     boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
-    coarse_tracker_for_new_kf_->makeK(&HCalib);
-    coarse_tracker_for_new_kf_->setCoarseTrackingRef(frameHessians);
+    coarseTrackerForNewKF->makeK(&HCalib);
+    coarseTrackerForNewKF->setCoarseTrackingRef(frameHessians);
 
-    coarse_tracker_for_new_kf_->debugPlotIDepthMap(
+    coarseTrackerForNewKF->debugPlotIDepthMap(
         &minIdJetVisTracker, &maxIdJetVisTracker, outputWrapper);
-    coarse_tracker_for_new_kf_->debugPlotIDepthMapFloat(outputWrapper);
+    coarseTrackerForNewKF->debugPlotIDepthMapFloat(outputWrapper);
   }
 
   // scale optimization
-  double new_scale = optimizeScale(coarse_tracker_for_new_kf_);
+  double new_scale = optimizeScale(coarseTrackerForNewKF);
   if (new_scale > 0) {
     HCalib.setScaleScaled(new_scale);
   }
@@ -950,7 +955,6 @@ void FullSystem::makeKeyFrame(FrameHessian *fh) {
   }
 
   // Marginalize Frames
-
   for (unsigned int i = 0; i < frameHessians.size(); i++)
     if (frameHessians[i]->flaggedForMarginalization) {
       marginalizeFrame(frameHessians[i]);
@@ -968,7 +972,8 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
   FrameHessian *firstFrame = coarseInitializer->firstFrame;
   firstFrame->idx = frameHessians.size();
   frameHessians.push_back(firstFrame);
-  firstFrame->frameID = allKeyFramesHistory.size();
+  firstFrame->frameID = allKeyFramesHistory.size() + prevKFSize;
+  ;
   allKeyFramesHistory.push_back(firstFrame->shell);
   ef->insertFrame(firstFrame, &HCalib);
   setPrecalcValues();
@@ -985,7 +990,7 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
   // get initial scale by scale optimization
   coarseInitializer->makeCoarseDepth();
   float init_scale = optimizeScale(coarseInitializer);
-  if (scale_opt_thres_ > 0 && init_scale < 0) {
+  if (setting_scale_opt_thres > 0 && init_scale < 0) {
     initFailed = true;
     return;
   }
@@ -1034,7 +1039,7 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
 
   // align w.r.t. gravity
   Mat33 rot_w_i0 = Mat33::Identity();
-  if (setting_g_norm * setting_g_norm > 0.1) {
+  if (setting_gravity.norm() > 0.1) {
     Vec3 g_imu = Vec3::Zero(); // gravity in imu frame
     printf("Gravity direction estimated from %d imu data.\n",
            setting_min_g_imu);
@@ -1049,11 +1054,9 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
     }
     g_imu.normalize();
 
-    Vec3 sg0;
-    sg0 << 1, 0, 0;
-    HCalib.setSgZero(sg0);
+    HCalib.setScaleScaledZero(1);
 
-    Vec3 g_world = HCalib.getG().normalized();
+    Vec3 g_world = setting_gravity.normalized();
     Vec3 rot = SO3::hat(g_imu) * g_world;
     double sin_theta = rot.norm();
     double cos_theta = g_imu.dot(g_world);
@@ -1064,18 +1067,21 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
   }
   Mat33 rot_w_c0 = rot_w_i0 * setting_rot_imu_cam;
   SE3 tfm_w_c0(rot_w_c0, Vec3::Zero());
+  if (curPose.log().norm() < 1e-3) {
+    curPose = tfm_w_c0;
+  }
 
   // really no lock required, as we are initializing.
   {
     boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
-    firstFrame->shell->camToWorld = tfm_w_c0;
+    firstFrame->shell->camToWorld = curPose;
     firstFrame->shell->aff_g2l = AffLight(0, 0);
     firstFrame->setEvalPT_scaled(firstFrame->shell->camToWorld,
                                  firstFrame->shell->aff_g2l);
     firstFrame->shell->trackingRef = 0;
     firstFrame->shell->camToTrackingRef = SE3();
 
-    newFrame->shell->camToWorld = tfm_w_c0 * firstToNew.inverse();
+    newFrame->shell->camToWorld = curPose * firstToNew.inverse();
     newFrame->shell->aff_g2l = AffLight(0, 0);
     newFrame->setEvalPT_scaled(newFrame->shell->camToWorld,
                                newFrame->shell->aff_g2l);
@@ -1127,68 +1133,79 @@ void FullSystem::setPrecalcValues() {
 }
 /* ========================= Scale optimization ========================== */
 void FullSystem::setStereoFrame(ImageAndExposure *image1, int incoming_id) {
-  fh1_ = new FrameHessian();
+  fhStereo = new FrameHessian();
   FrameShell *shell1 = new FrameShell();
   shell1->incoming_id = incoming_id;
-  fh1_->shell = shell1;
-  fh1_->makeImages(image1->image, 0);
+  fhStereo->shell = shell1;
+  fhStereo->makeImages(image1->image, 0);
 }
 
 float FullSystem::optimizeScale(ScaleOptimizer *scale_optimizer) {
-  if (scale_opt_thres_ <= 0) {
+  if (setting_scale_opt_thres <= 0) {
     return 1.0;
   }
 
-  static bool scale_trapped = false;
   static int scale_opt_fails = 0;
 
-  assert(frameHessians.back()->shell->incoming_id == fh1_->shell->incoming_id);
+  assert(frameHessians.back()->shell->incoming_id == fhStereo->shell->incoming_id);
 
   // find the optimal scale
   float new_scale = 1.0;
   float scale_error = -1;
-  if (scale_trapped) {
+  if (scaleTrapped) {
     scale_error =
-        scale_optimizer->optimizeScale(fh1_, new_scale, pyrLevelsUsed - 1);
+        scale_optimizer->optimizeScale(fhStereo, new_scale, pyrLevelsUsed - 1);
   } else {
     std::vector<float> scale_guess = {0.1, 1, 5, 10, 15, 25, 30, 50};
     for (float cur_scale : scale_guess) {
+      printf("Scale opt trail: scale:%f -> ", cur_scale);
       float cur_error =
-          scale_optimizer->optimizeScale(fh1_, cur_scale, pyrLevelsUsed - 1);
+          scale_optimizer->optimizeScale(fhStereo, cur_scale, pyrLevelsUsed - 1);
+      printf("%f, error:%f\n", cur_scale, cur_error);
       if (cur_error > 0 && (scale_error < 0 || scale_error > cur_error)) {
         scale_error = cur_error;
         new_scale = cur_scale;
       }
     }
   }
-  delete fh1_->shell;
-  delete fh1_;
+  delete fhStereo->shell;
+  delete fhStereo;
 
   bool scale_opt_succeed =
-      (0 < scale_error) && (scale_error < scale_opt_thres_);
+      (0 < scale_error) && (scale_error < setting_scale_opt_thres);
 
   // // when scale optimization is working, we don't expect sudden scale change
   // bool scale_jump = fabs(new_scale - 1.0) > 0.5;
-  // if (scale_trapped && scale_jump) {
+  // if (scaleTrapped && scale_jump) {
   //   scale_opt_succeed = false;
   // }
 
   // when scale optimization fails continuously, we need to re-initialize scale
   scale_opt_fails = scale_opt_succeed ? 0 : scale_opt_fails + 1;
   if (scale_opt_fails > 5) {
-    scale_trapped = false;
-    scale_error = -1;
+    scaleTrapped = false;
   }
 
-  printf("Scale opt: error=%f, scale=%f, %s\n", scale_error, new_scale,
-         scale_opt_succeed ? "accepted" : "rejected");
+  frameHessians.back()->scale_error = scale_error;
+
+  // printf("Scale opt: error=%f, scale=%f, %s\n", scale_error, new_scale,
+  //        scale_opt_succeed ? "accepted" : "rejected");
   if (!scale_opt_succeed) {
     printf("Scale rejected: error=%f, scale=%f\n", scale_error, new_scale);
     new_scale = -1.0;
-  } else if (!scale_trapped) {
+  } else if (!scaleTrapped) {
     printf("scale trapped to %.2f\n", new_scale);
-    scale_trapped = true;
+    scaleTrapped = true;
   }
   return new_scale;
+}
+
+/* ============================ Loop closure ============================= */
+void FullSystem::setLoopHandler(LoopHandler *loop_handler) {
+  loopHandler = loop_handler;
+}
+
+int FullSystem::getTotalKFSize() {
+  return allKeyFramesHistory.size() + prevKFSize;
 }
 } // namespace dso

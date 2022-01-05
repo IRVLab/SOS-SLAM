@@ -186,14 +186,18 @@ bool setting_estimate_scale = true;
 bool setting_print_imu = true;
 
 int setting_min_g_imu = 40;         // minimal # of imu data for gravity est.
-double setting_g_norm = -9.80665;   // gravity norm
 float setting_maxImuInterval = 0.5; // max time interval (seconds) for spline
 double setting_scale_trap_thres = 1e-4; // variance to trap scale
 
+Vec3 setting_gravity; // gravity
 Mat33 setting_rot_imu_cam;
 double setting_weight_imu_dso; // factor of spline imu vs dso
 Mat66 setting_weight_imu;      // imu weight (cov^{-1})
 Mat66 setting_weight_imu_bias; // imu bias weight (cov^{-1})
+
+float setting_scale_opt_thres;    // scale optimization threshold
+float setting_lidar_range;        // lidar range for place recognition
+float setting_scan_context_thres; // scan context threshold
 
 void handleKey(char k) {
   char kkk = k;

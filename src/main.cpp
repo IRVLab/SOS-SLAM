@@ -30,46 +30,47 @@
 #include <sensor_msgs/Imu.h>
 
 #include "FullSystem/FullSystem.h"
-#include "IOWrapper/Pangolin/PangolinDSOViewer.h"
+#include "IOWrapper/Pangolin/PangolinSOSVIOViewer.h"
 #include "util/Undistort.h"
 
 using namespace dso;
 
 class VioNode {
 private:
-  int start_frame_;
-  double td_cam_imu_;
-  int incoming_id_;
-  FullSystem *full_system_;
-  Undistort *undistorter0_;
-  Undistort *undistorter1_;
-  std::queue<Vec7> imu_queue_;
-  std::queue<std::pair<ImageAndExposure *, ImageAndExposure *>> img_queue_;
-  boost::mutex imu_queue_mutex_;
-  boost::mutex img_queue_mutex_;
+  int startFrame;
+  double tdCamImu;
+  int incomingId;
+  FullSystem *fullSystem;
+  Undistort *undistorter0;
+  Undistort *undistorter1;
+  std::queue<Vec7> imuQueue;
+  std::queue<std::pair<ImageAndExposure *, ImageAndExposure *>> imgQueue;
+  boost::mutex imuQueueMutex;
+  boost::mutex imgQueueMutex;
 
   // scale optimizer
-  std::vector<double> tfm_stereo_;
-  float scale_opt_thres_; // set to -1 to disable scale optimization
+  std::vector<double> tfmStereo;
 
   void settingsDefault(int preset, int mode);
 
+  // loop closure
+  LoopHandler *loopHandler;
+
 public:
   bool isLost;
-  std::vector<double> frame_tt_;
+  std::vector<double> ttFrame;
 
   VioNode(int start_frame, double td_cam_imu,
           const std::vector<double> &tfm_stereo, const std::string &calib0,
           const std::string &calib1, const std::string &vignette0,
           const std::string &vignette1, const std::string &gamma0,
-          const std::string &gamma1, bool nomt, int preset, int mode,
-          float scale_opt_thres);
+          const std::string &gamma1, bool nomt, int preset, int mode);
   ~VioNode();
 
   void imuMessageCallback(const sensor_msgs::ImuConstPtr &msg);
   void imageMessageCallback(const sensor_msgs::ImageConstPtr &msg0,
                             const sensor_msgs::ImageConstPtr &msg1);
-  void printResult(std::string file) { full_system_->printResult(file); }
+  void printResult(std::string file) { fullSystem->printResult(file); }
 };
 
 void VioNode::settingsDefault(int preset, int mode) {
@@ -138,70 +139,74 @@ VioNode::VioNode(int start_frame, double td_cam_imu,
                  const std::string &calib0, const std::string &calib1,
                  const std::string &vignette0, const std::string &vignette1,
                  const std::string &gamma0, const std::string &gamma1,
-                 bool nomt, int preset, int mode, float scale_opt_thres)
-    : start_frame_(start_frame), tfm_stereo_(tfm_stereo),
-      scale_opt_thres_(scale_opt_thres) {
+                 bool nomt, int preset, int mode)
+    : startFrame(start_frame), tfmStereo(tfm_stereo) {
 
   // DSO front end
   settingsDefault(preset, mode);
 
   multiThreading = !nomt;
 
-  undistorter0_ = Undistort::getUndistorterForFile(calib0, gamma0, vignette0);
-  undistorter1_ = Undistort::getUndistorterForFile(calib1, gamma1, vignette1);
-  assert((int)undistorter0_->getSize()[0] == (int)undistorter1_->getSize()[0]);
-  assert((int)undistorter0_->getSize()[1] == (int)undistorter1_->getSize()[1]);
+  undistorter0 = Undistort::getUndistorterForFile(calib0, gamma0, vignette0);
+  undistorter1 = Undistort::getUndistorterForFile(calib1, gamma1, vignette1);
+  assert((int)undistorter0->getSize()[0] == (int)undistorter1->getSize()[0]);
+  assert((int)undistorter0->getSize()[1] == (int)undistorter1->getSize()[1]);
 
-  setGlobalCalib((int)undistorter0_->getSize()[0],
-                 (int)undistorter0_->getSize()[1],
-                 undistorter0_->getK().cast<float>());
+  setGlobalCalib((int)undistorter0->getSize()[0],
+                 (int)undistorter0->getSize()[1],
+                 undistorter0->getK().cast<float>());
 
-  full_system_ = new FullSystem(
-      tfm_stereo_, undistorter1_->getK().cast<float>(), scale_opt_thres_);
-  if (undistorter0_->photometricUndist != 0)
-    full_system_->setGammaFunction(undistorter0_->photometricUndist->getG());
+  fullSystem = new FullSystem(tfmStereo, undistorter1->getK().cast<float>());
+  if (undistorter0->photometricUndist != 0)
+    fullSystem->setGammaFunction(undistorter0->photometricUndist->getG());
 
+  IOWrap::PangolinSOSVIOViewer *pangolinViewer = 0;
   if (!disableAllDisplay) {
-    IOWrap::PangolinDSOViewer *viewer =
-        new IOWrap::PangolinDSOViewer(wG[0], hG[0], true);
-    full_system_->outputWrapper.push_back(viewer);
+    IOWrap::PangolinSOSVIOViewer *pangolinViewer =
+        new IOWrap::PangolinSOSVIOViewer(wG[0], hG[0], true);
+    fullSystem->outputWrapper.push_back(pangolinViewer);
   }
+  loopHandler = new LoopHandler(pangolinViewer);
+  // setLoopHandler is called even if loop closure is disabled
+  // because results are recordered by LoopHandler
+  // but loop closure is disabled internally if loop closure is disabled
+  fullSystem->setLoopHandler(loopHandler);
 
-  incoming_id_ = 0;
+  incomingId = 0;
 }
 
 VioNode::~VioNode() {
-  delete undistorter0_;
-  delete undistorter1_;
-  for (auto &ow : full_system_->outputWrapper) {
+  delete undistorter0;
+  delete undistorter1;
+  for (auto &ow : fullSystem->outputWrapper) {
     delete ow;
   }
-  delete full_system_;
+  delete fullSystem;
 }
 
 void VioNode::imuMessageCallback(const sensor_msgs::ImuConstPtr &msg) {
-  boost::unique_lock<boost::mutex> lock(imu_queue_mutex_);
+  boost::unique_lock<boost::mutex> lock(imuQueueMutex);
   Vec7 imu_data;
-  imu_data[0] = msg->header.stamp.toSec() - td_cam_imu_;
+  imu_data[0] = msg->header.stamp.toSec() - tdCamImu;
   imu_data.segment<3>(1) << msg->linear_acceleration.x,
       msg->linear_acceleration.y, msg->linear_acceleration.z;
   imu_data.tail(3) << msg->angular_velocity.x, msg->angular_velocity.y,
       msg->angular_velocity.z;
-  imu_queue_.push(imu_data);
+  imuQueue.push(imu_data);
 }
 
 void VioNode::imageMessageCallback(const sensor_msgs::ImageConstPtr &msg0,
                                    const sensor_msgs::ImageConstPtr &msg1) {
-  if (start_frame_ > 0) {
-    start_frame_--;
-    incoming_id_++;
-    while (!imu_queue_.empty()) {
-      imu_queue_.pop();
+  if (startFrame > 0) {
+    startFrame--;
+    incomingId++;
+    while (!imuQueue.empty()) {
+      imuQueue.pop();
     }
     return;
   }
 
-  boost::unique_lock<boost::mutex> img_lock(img_queue_mutex_);
+  boost::unique_lock<boost::mutex> img_lock(imgQueueMutex);
   cv::Mat img0, img1;
   try {
     img0 = cv_bridge::toCvShare(msg0, "mono8")->image;
@@ -213,71 +218,72 @@ void VioNode::imageMessageCallback(const sensor_msgs::ImageConstPtr &msg0,
   MinimalImageB minImg0((int)img0.cols, (int)img0.rows,
                         (unsigned char *)img0.data);
   ImageAndExposure *undistImg0 =
-      undistorter0_->undistort<unsigned char>(&minImg0, 1, 0, 1.0f);
+      undistorter0->undistort<unsigned char>(&minImg0, 1, 0, 1.0f);
   undistImg0->timestamp = msg0->header.stamp.toSec();
   MinimalImageB minImg1((int)img1.cols, (int)img1.rows,
                         (unsigned char *)img1.data);
   ImageAndExposure *undistImg1 =
-      undistorter1_->undistort<unsigned char>(&minImg1, 1, 0, 1.0f);
+      undistorter1->undistort<unsigned char>(&minImg1, 1, 0, 1.0f);
 
-  img_queue_.push({undistImg0, undistImg1});
+  imgQueue.push({undistImg0, undistImg1});
 
-  boost::unique_lock<boost::mutex> imu_lock(imu_queue_mutex_);
-  while (!imu_queue_.empty() && !img_queue_.empty() &&
-         img_queue_.front().first->timestamp < imu_queue_.back()[0]) {
+  boost::unique_lock<boost::mutex> imu_lock(imuQueueMutex);
+  while (!imuQueue.empty() && !imgQueue.empty() &&
+         imgQueue.front().first->timestamp < imuQueue.back()[0]) {
     // current image pair
-    ImageAndExposure *cur_img0 = img_queue_.front().first;
-    ImageAndExposure *cur_img1 = img_queue_.front().second;
-    img_queue_.pop();
+    ImageAndExposure *cur_img0 = imgQueue.front().first;
+    ImageAndExposure *cur_img1 = imgQueue.front().second;
+    imgQueue.pop();
 
     // get all imu data by current img timestamp
     std::vector<Vec7> cur_imu_data;
-    while (imu_queue_.front()[0] < cur_img0->timestamp) {
-      cur_imu_data.push_back(imu_queue_.front());
-      imu_queue_.pop();
+    while (imuQueue.front()[0] < cur_img0->timestamp) {
+      cur_imu_data.push_back(imuQueue.front());
+      imuQueue.pop();
     }
-    assert(!imu_queue_.empty());
+    assert(!imuQueue.empty());
 
     if (!cur_imu_data.empty()) {
       // interpolate imu data at cur image time
       Vec7 last_imu_data =
-          ((imu_queue_.front()[0] - cur_img0->timestamp) * cur_imu_data.back() +
-           (cur_img0->timestamp - cur_imu_data.back()[0]) *
-               imu_queue_.front()) /
-          ((imu_queue_.front()[0] - cur_imu_data.back()[0]));
+          ((imuQueue.front()[0] - cur_img0->timestamp) * cur_imu_data.back() +
+           (cur_img0->timestamp - cur_imu_data.back()[0]) * imuQueue.front()) /
+          ((imuQueue.front()[0] - cur_imu_data.back()[0]));
       last_imu_data[0] = cur_img0->timestamp;
       cur_imu_data.push_back(last_imu_data);
 
       auto start = std::chrono::steady_clock::now();
-      full_system_->addActiveFrame(cur_imu_data, cur_img0, cur_img1,
-                                   incoming_id_);
+      fullSystem->addActiveFrame(cur_imu_data, cur_img0, cur_img1, incomingId);
       auto end = std::chrono::steady_clock::now();
-      frame_tt_.push_back(
+      ttFrame.push_back(
           std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
               .count());
 
       // reinitialize if necessary
-      if (full_system_->initFailed) {
+      if (fullSystem->initFailed) {
+        auto lastPose = fullSystem->curPose;
+        int existing_kf_size = fullSystem->getTotalKFSize();
         std::vector<IOWrap::Output3DWrapper *> wraps =
-            full_system_->outputWrapper;
-        delete full_system_;
+            fullSystem->outputWrapper;
+        delete fullSystem;
 
         printf("Reinitializing\n");
-        full_system_ = new FullSystem(
-            tfm_stereo_, undistorter1_->getK().cast<float>(), scale_opt_thres_);
-        if (undistorter0_->photometricUndist != 0)
-          full_system_->setGammaFunction(
-              undistorter0_->photometricUndist->getG());
-        full_system_->outputWrapper = wraps;
+        fullSystem = new FullSystem(
+            tfmStereo, undistorter1->getK().cast<float>(), existing_kf_size);
+        if (undistorter0->photometricUndist != 0)
+          fullSystem->setGammaFunction(undistorter0->photometricUndist->getG());
+        fullSystem->setLoopHandler(loopHandler);
+        fullSystem->outputWrapper = wraps;
+        fullSystem->curPose = lastPose;
         // setting_fullResetRequested=false;
       }
     }
 
     delete cur_img0;
     delete cur_img1;
-    incoming_id_++;
+    incomingId++;
 
-    if (full_system_->isLost) {
+    if (fullSystem->isLost) {
       printf("LOST!!\n");
       isLost = true;
     }
@@ -285,7 +291,7 @@ void VioNode::imageMessageCallback(const sensor_msgs::ImageConstPtr &msg0,
 }
 
 int main(int argc, char **argv) {
-  ros::init(argc, argv, "spline_vio");
+  ros::init(argc, argv, "sos_slam");
   ros::NodeHandle nhPriv("~");
 
   /* *********************** required parameters ************************ */
@@ -328,17 +334,22 @@ int main(int argc, char **argv) {
   nhPriv.param<std::string>("vignette", vignette, "");
   nhPriv.param<std::string>("gamma", gamma, "");
 
-  double td_cam_imu;
+  double td_cam_imu, g_norm;
   nhPriv.param("timeshift_cam_imu", td_cam_imu, 0.0);
   nhPriv.param("weight_imu_dso", setting_weight_imu_dso, 1.0);
-  nhPriv.param("g_norm", setting_g_norm, -9.80665);
+  nhPriv.param("g_norm", g_norm, 9.80665);
   setting_enable_imu = setting_weight_imu_dso > 0;
+  setting_gravity << 0, 0, -g_norm;
 
-  float scale_opt_thres;
-  nhPriv.param("scale_opt_thres", scale_opt_thres, 10.0f);
-  if (scale_opt_thres > 0) {
+  // scale optimization threshold
+  nhPriv.param("scale_opt_thres", setting_scale_opt_thres, 10.0f);
+  if (setting_scale_opt_thres > 0) {
     setting_estimate_scale = false;
   }
+
+  // loop closure parameters
+  nhPriv.param("lidar_range", setting_lidar_range, 40.0f);
+  nhPriv.param("scan_context_thres", setting_scan_context_thres, 0.33f);
 
   // read from a bag file
   std::string bag_path;
@@ -349,8 +360,7 @@ int main(int argc, char **argv) {
   /* ******************************************************************** */
 
   VioNode vio_node(start_frame, td_cam_imu, tfm_stereo, calib0, calib1,
-                   vignette0, vignette1, gamma0, gamma1, nomt, preset, mode,
-                   scale_opt_thres);
+                   vignette0, vignette1, gamma0, gamma1, nomt, preset, mode);
 
   cv::Mat tfm_imu_cv = cv::Mat(tfm_imu);
   tfm_imu_cv = tfm_imu_cv.reshape(0, 4);
@@ -428,10 +438,10 @@ int main(int argc, char **argv) {
   vio_node.printResult(results_path);
 
   int total_frame_tt = 0;
-  for (int tt : vio_node.frame_tt_) {
+  for (int tt : vio_node.ttFrame) {
     total_frame_tt += tt;
   }
-  printf("frame_tt: %.1f\n", float(total_frame_tt) / vio_node.frame_tt_.size());
+  printf("frame_tt: %.1f\n", float(total_frame_tt) / vio_node.ttFrame.size());
 
   ros::spinOnce();
   return 0;

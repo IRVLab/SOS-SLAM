@@ -102,8 +102,7 @@ public:
 
   // ToDo: move to private
   void getImuHessian(MatXX &H, VecX &b, MatXX &J_cst, VecX &r_cst,
-                     CalibHessian *HCalib, std::vector<bool> &is_spline_valid,
-                     bool print = false);
+                     CalibHessian *HCalib, bool print = false);
 
 private:
   VecX getStitchedDeltaF() const;
@@ -119,8 +118,7 @@ private:
   void expandHbtoFitImu(MatXX &H, VecX &b);
 
   void getImuHessianCurrentFrame(int fi, CalibHessian *HCalib, MatXX &H,
-                                 VecX &b, bool &spline_valid, MatXX &J_vr,
-                                 VecX &r_vr, bool print);
+                                 VecX &b, MatXX &J_vr, VecX &r_vr, bool print);
 
   void calcLEnergyPt(int min, int max, Vec10 *stats, int tid);
 

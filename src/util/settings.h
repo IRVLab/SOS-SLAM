@@ -156,13 +156,17 @@ extern bool setting_print_imu;
 
 extern int setting_min_g_imu;
 extern float setting_maxImuInterval;
-extern double setting_g_norm;
 extern double setting_scale_trap_thres;
 
+extern Vec3 setting_gravity;
 extern Mat33 setting_rot_imu_cam;
 extern double setting_weight_imu_dso;
 extern Mat66 setting_weight_imu;
 extern Mat66 setting_weight_imu_bias;
+
+extern float setting_scale_opt_thres;
+extern float setting_lidar_range;
+extern float setting_scan_context_thres;
 
 void handleKey(char k);
 

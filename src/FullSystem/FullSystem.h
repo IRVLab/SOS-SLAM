@@ -43,6 +43,8 @@
 
 #include <math.h>
 
+#include "LoopClosure/LoopHandler.h"
+
 namespace dso {
 namespace IOWrap {
 class Output3DWrapper;
@@ -76,7 +78,7 @@ template <typename T> inline void deleteOutPt(std::vector<T *> &v, const T *i) {
 }
 template <typename T>
 inline void deleteOutOrder(std::vector<T *> &v, const int i) {
-  delete v[i];
+  // delete v[i];
   for (unsigned int k = i + 1; k < v.size(); k++)
     v[k - 1] = v[k];
   v.pop_back();
@@ -96,7 +98,7 @@ inline void deleteOutOrder(std::vector<T *> &v, const T *element) {
     v[k - 1] = v[k];
   v.pop_back();
 
-  delete element;
+  // delete element;
 }
 
 inline bool eigenTestNan(const MatXX &m, std::string msg) {
@@ -119,7 +121,7 @@ class FullSystem {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   FullSystem(const std::vector<double> &tfm_stereo, const Mat33f &K1,
-             float scale_opt_thres);
+             int prev_kf_size = 0);
   virtual ~FullSystem();
 
   // adds a new frame, and creates point & residual structs.
@@ -149,6 +151,11 @@ public:
   void setGammaFunction(float *BInv);
   void setOriginalCalib(const VecXf &originalCalib, int originalW,
                         int originalH);
+
+  /* ============================ Loop closure ============================= */
+  SE3 curPose;
+  void setLoopHandler(LoopHandler *loop_handler);
+  int getTotalKFSize();
 
 private:
   CalibHessian HCalib;
@@ -247,9 +254,9 @@ private:
       coarseTrackerSwapMutex; // if tracker sees that there is a new reference,
                               // tracker locks [coarseTrackerSwapMutex] and
                               // swaps the two.
-  CoarseTracker *coarse_tracker_for_new_kf_; // set as as reference. protected
+  CoarseTracker *coarseTrackerForNewKF; // set as as reference. protected
                                              // by [coarseTrackerSwapMutex].
-  CoarseTracker *coarse_tracker_;            // always used to track new frames.
+  CoarseTracker *coarseTracker;            // always used to track new frames.
                                              // protected by [trackMutex].
   float minIdJetVisTracker, maxIdJetVisTracker;
   float minIdJetVisDebug, maxIdJetVisDebug;
@@ -273,9 +280,13 @@ private:
   int lastRefStopID;
 
   /* ========================= Scale optimization ========================== */
-  FrameHessian *fh1_;
-  float scale_opt_thres_;
+  bool scaleTrapped;
+  FrameHessian *fhStereo;
   void setStereoFrame(ImageAndExposure *image1, int incoming_id);
   float optimizeScale(ScaleOptimizer *scale_optimizer);
+
+  /* ============================ Loop closure ============================= */
+  int prevKFSize; // previous kf size for increasing kf id
+  LoopHandler *loopHandler;
 };
 } // namespace dso

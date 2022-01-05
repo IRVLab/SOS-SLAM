@@ -39,14 +39,14 @@ CoarseTracker::CoarseTracker(int ww, int hh, const std::vector<double> &tfm_vec,
                              const Mat33f &K1)
     : ScaleOptimizer(ww, hh, tfm_vec, K1), lastRef_aff_g2l(0, 0) {
   // pose warped buffers
-  poseBufWarped_idepth = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  poseBufWarped_u = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  poseBufWarped_v = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  poseBufWarped_dx = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  poseBufWarped_dy = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  poseBufWarped_residual = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  poseBufWarped_weight = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  poseBufWarped_refColor = allocAligned<4, float>(ww * hh, ptr_to_delete_);
+  poseBufWarped_idepth = allocAligned<4, float>(ww * hh, ptrToDelete);
+  poseBufWarped_u = allocAligned<4, float>(ww * hh, ptrToDelete);
+  poseBufWarped_v = allocAligned<4, float>(ww * hh, ptrToDelete);
+  poseBufWarped_dx = allocAligned<4, float>(ww * hh, ptrToDelete);
+  poseBufWarped_dy = allocAligned<4, float>(ww * hh, ptrToDelete);
+  poseBufWarped_residual = allocAligned<4, float>(ww * hh, ptrToDelete);
+  poseBufWarped_weight = allocAligned<4, float>(ww * hh, ptrToDelete);
+  poseBufWarped_refColor = allocAligned<4, float>(ww * hh, ptrToDelete);
 
   newFrame = 0;
   lastRef = 0;
@@ -56,8 +56,8 @@ CoarseTracker::CoarseTracker(int ww, int hh, const std::vector<double> &tfm_vec,
 void CoarseTracker::makeCoarseDepthL0(
     std::vector<FrameHessian *> frameHessians) {
   // make coarse tracking templates for latstRef.
-  memset(idepth_[0], 0, sizeof(float) * w_[0] * h_[0]);
-  memset(weight_sums_[0], 0, sizeof(float) * w_[0] * h_[0]);
+  memset(idepth[0], 0, sizeof(float) * w[0] * h[0]);
+  memset(weight_sums[0], 0, sizeof(float) * w[0] * h[0]);
 
   for (FrameHessian *fh : frameHessians) {
     for (PointHessian *ph : fh->pointHessians) {
@@ -70,21 +70,23 @@ void CoarseTracker::makeCoarseDepthL0(
         float new_idepth = r->centerProjectedTo[2];
         float weight = sqrtf(1e-3 / (ph->efPoint->HdiF + 1e-12));
 
-        idepth_[0][u + w_[0] * v] += new_idepth * weight;
-        weight_sums_[0][u + w_[0] * v] += weight;
+        idepth[0][u + w[0] * v] += new_idepth * weight;
+        weight_sums[0][u + w[0] * v] += weight;
+
+        lastRef->points.push_back({float(u), float(v), new_idepth});
       }
     }
   }
 
   for (int lvl = 1; lvl < pyrLevelsUsed; lvl++) {
     int lvlm1 = lvl - 1;
-    int wl = w_[lvl], hl = h_[lvl], wlm1 = w_[lvlm1];
+    int wl = w[lvl], hl = h[lvl], wlm1 = w[lvlm1];
 
-    float *idepth_l = idepth_[lvl];
-    float *weight_sums_l = weight_sums_[lvl];
+    float *idepth_l = idepth[lvl];
+    float *weight_sums_l = weight_sums[lvl];
 
-    float *idepth_lm = idepth_[lvlm1];
-    float *weight_sums_lm = weight_sums_[lvlm1];
+    float *idepth_lm = idepth[lvlm1];
+    float *weight_sums_lm = weight_sums[lvlm1];
 
     for (int y = 0; y < hl; y++)
       for (int x = 0; x < wl; x++) {
@@ -104,16 +106,16 @@ void CoarseTracker::makeCoarseDepthL0(
     int numIts = 1;
 
     for (int it = 0; it < numIts; it++) {
-      int wh = w_[lvl] * h_[lvl] - w_[lvl];
-      int wl = w_[lvl];
-      float *weightSumsl = weight_sums_[lvl];
-      float *weightSumsl_bak = weight_sums_bak_[lvl];
-      memcpy(weightSumsl_bak, weightSumsl, w_[lvl] * h_[lvl] * sizeof(float));
+      int wh = w[lvl] * h[lvl] - w[lvl];
+      int wl = w[lvl];
+      float *weightSumsl = weight_sums[lvl];
+      float *weightSumsl_bak = weight_sums_bak[lvl];
+      memcpy(weightSumsl_bak, weightSumsl, w[lvl] * h[lvl] * sizeof(float));
       float *idepthl =
-          idepth_[lvl]; // dotnt need to make a temp copy of depth, since I only
+          idepth[lvl]; // dotnt need to make a temp copy of depth, since I only
                         // read values with weightSumsl>0, and write ones with
                         // weightSumsl<=0.
-      for (int i = w_[lvl]; i < wh; i++) {
+      for (int i = w[lvl]; i < wh; i++) {
         if (weightSumsl_bak[i] <= 0) {
           float sum = 0, num = 0, numn = 0;
           if (weightSumsl_bak[i + 1 + wl] > 0) {
@@ -147,16 +149,16 @@ void CoarseTracker::makeCoarseDepthL0(
 
   // dilate idepth_ by 1 (2 on lower levels).
   for (int lvl = 2; lvl < pyrLevelsUsed; lvl++) {
-    int wh = w_[lvl] * h_[lvl] - w_[lvl];
-    int wl = w_[lvl];
-    float *weightSumsl = weight_sums_[lvl];
-    float *weightSumsl_bak = weight_sums_bak_[lvl];
-    memcpy(weightSumsl_bak, weightSumsl, w_[lvl] * h_[lvl] * sizeof(float));
+    int wh = w[lvl] * h[lvl] - w[lvl];
+    int wl = w[lvl];
+    float *weightSumsl = weight_sums[lvl];
+    float *weightSumsl_bak = weight_sums_bak[lvl];
+    memcpy(weightSumsl_bak, weightSumsl, w[lvl] * h[lvl] * sizeof(float));
     float *idepthl =
-        idepth_[lvl]; // dotnt need to make a temp copy of depth, since I only
+        idepth[lvl]; // dotnt need to make a temp copy of depth, since I only
                       // read values with weightSumsl>0, and write ones with
                       // weightSumsl<=0.
-    for (int i = w_[lvl]; i < wh; i++) {
+    for (int i = w[lvl]; i < wh; i++) {
       if (weightSumsl_bak[i] <= 0) {
         float sum = 0, num = 0, numn = 0;
         if (weightSumsl_bak[i + 1] > 0) {
@@ -189,17 +191,17 @@ void CoarseTracker::makeCoarseDepthL0(
 
   // normalize idepths and weights.
   for (int lvl = 0; lvl < pyrLevelsUsed; lvl++) {
-    float *weightSumsl = weight_sums_[lvl];
-    float *idepthl = idepth_[lvl];
+    float *weightSumsl = weight_sums[lvl];
+    float *idepthl = idepth[lvl];
     Eigen::Vector3f *dIRefl = lastRef->dIp[lvl];
 
-    int wl = w_[lvl], hl = h_[lvl];
+    int wl = w[lvl], hl = h[lvl];
 
     int lpc_n = 0;
-    float *lpc_u = pc_u_[lvl];
-    float *lpc_v = pc_v_[lvl];
-    float *lpc_idepth = pc_idepth_[lvl];
-    float *lpc_color = pc_color_[lvl];
+    float *lpc_u = pc_u[lvl];
+    float *lpc_v = pc_v[lvl];
+    float *lpc_idepth = pc_idepth[lvl];
+    float *lpc_color = pc_color[lvl];
 
     for (int y = 2; y < hl - 2; y++)
       for (int x = 2; x < wl - 2; x++) {
@@ -223,7 +225,7 @@ void CoarseTracker::makeCoarseDepthL0(
         weightSumsl[i] = 1;
       }
 
-    pc_n_[lvl] = lpc_n;
+    pc_n[lvl] = lpc_n;
   }
 }
 
@@ -241,8 +243,8 @@ void CoarseTracker::setCoarseTrackingRef(
 
 void CoarseTracker::scaleCoarseDepthL0(float scale) {
   for (int lvl = 0; lvl < pyrLevelsUsed; lvl++) {
-    float *lpc_idepth = pc_idepth_[lvl];
-    for (int p = 0; p < pc_n_[lvl]; p++) {
+    float *lpc_idepth = pc_idepth[lvl];
+    for (int p = 0; p < pc_n[lvl]; p++) {
       lpc_idepth[p] /= scale;
     }
   }
@@ -251,16 +253,16 @@ void CoarseTracker::scaleCoarseDepthL0(float scale) {
 void CoarseTracker::debugPlotIDepthMap(
     float *minID_pt, float *maxID_pt,
     std::vector<IOWrap::Output3DWrapper *> &wraps) {
-  if (w_[1] == 0)
+  if (w[1] == 0)
     return;
 
   int lvl = 0;
 
   {
     std::vector<float> allID;
-    for (int i = 0; i < h_[lvl] * w_[lvl]; i++) {
-      if (idepth_[lvl][i] > 0)
-        allID.push_back(idepth_[lvl][i]);
+    for (int i = 0; i < h[lvl] * w[lvl]; i++) {
+      if (idepth[lvl][i] > 0)
+        allID.push_back(idepth[lvl][i]);
     }
     std::sort(allID.begin(), allID.end());
     int n = allID.size() - 1;
@@ -295,20 +297,20 @@ void CoarseTracker::debugPlotIDepthMap(
       }
     }
 
-    MinimalImageB3 mf(w_[lvl], h_[lvl]);
+    MinimalImageB3 mf(w[lvl], h[lvl]);
     mf.setBlack();
-    for (int i = 0; i < h_[lvl] * w_[lvl]; i++) {
+    for (int i = 0; i < h[lvl] * w[lvl]; i++) {
       int c = lastRef->dIp[lvl][i][0] * 0.9f;
       if (c > 255)
         c = 255;
       mf.at(i) = Vec3b(c, c, c);
     }
-    int wl = w_[lvl];
-    for (int y = 3; y < h_[lvl] - 3; y++)
+    int wl = w[lvl];
+    for (int y = 3; y < h[lvl] - 3; y++)
       for (int x = 3; x < wl - 3; x++) {
         int idx = x + y * wl;
         float sid = 0, nid = 0;
-        float *bp = idepth_[lvl] + idx;
+        float *bp = idepth[lvl] + idx;
 
         if (bp[0] > 0) {
           sid += bp[0];
@@ -353,10 +355,10 @@ void CoarseTracker::debugPlotIDepthMap(
 
 void CoarseTracker::debugPlotIDepthMapFloat(
     std::vector<IOWrap::Output3DWrapper *> &wraps) {
-  if (w_[1] == 0)
+  if (w[1] == 0)
     return;
   int lvl = 0;
-  MinimalImageF mim(w_[lvl], h_[lvl], idepth_[lvl]);
+  MinimalImageF mim(w[lvl], h[lvl], idepth[lvl]);
   for (IOWrap::Output3DWrapper *ow : wraps)
     ow->pushDepthImageFloat(&mim, lastRef);
 }
@@ -553,8 +555,8 @@ void CoarseTracker::calcGSSSEPose(int lvl, Mat88 &H_out, Vec8 &b_out,
                                   const SE3 &refToNew, AffLight aff_g2l) {
   poseAcc.initialize();
 
-  __m128 fxl = _mm_set1_ps(fx_[lvl]);
-  __m128 fyl = _mm_set1_ps(fy_[lvl]);
+  __m128 fxl = _mm_set1_ps(fx[lvl]);
+  __m128 fyl = _mm_set1_ps(fy[lvl]);
   __m128 b0 = _mm_set1_ps(lastRef_aff_g2l.b);
   __m128 a = _mm_set1_ps((float)(AffLight::fromToVecExposure(
       lastRef->ab_exposure, newFrame->ab_exposure, lastRef_aff_g2l,
@@ -614,15 +616,15 @@ Vec6 CoarseTracker::calcResPose(int lvl, const SE3 &refToNew, AffLight aff_g2l,
   int numTermsInWarped = 0;
   int numSaturated = 0;
 
-  int wl = w_[lvl];
-  int hl = h_[lvl];
+  int wl = w[lvl];
+  int hl = h[lvl];
   Eigen::Vector3f *dINewl = newFrame->dIp[lvl];
-  float fxl = fx_[lvl];
-  float fyl = fy_[lvl];
-  float cxl = cx_[lvl];
-  float cyl = cy_[lvl];
+  float fxl = fx[lvl];
+  float fyl = fy[lvl];
+  float cxl = cx[lvl];
+  float cyl = cy[lvl];
 
-  Mat33f RKi = (refToNew.rotationMatrix().cast<float>() * Ki_[lvl]);
+  Mat33f RKi = (refToNew.rotationMatrix().cast<float>() * Ki[lvl]);
   Vec3f t = (refToNew.translation()).cast<float>();
   Vec2f affLL =
       AffLight::fromToVecExposure(lastRef->ab_exposure, newFrame->ab_exposure,
@@ -643,11 +645,11 @@ Vec6 CoarseTracker::calcResPose(int lvl, const SE3 &refToNew, AffLight aff_g2l,
     resImage->setConst(Vec3b(255, 255, 255));
   }
 
-  int nl = pc_n_[lvl];
-  float *lpc_u = pc_u_[lvl];
-  float *lpc_v = pc_v_[lvl];
-  float *lpc_idepth = pc_idepth_[lvl];
-  float *lpc_color = pc_color_[lvl];
+  int nl = pc_n[lvl];
+  float *lpc_u = pc_u[lvl];
+  float *lpc_v = pc_v[lvl];
+  float *lpc_idepth = pc_idepth[lvl];
+  float *lpc_color = pc_color[lvl];
 
   for (int i = 0; i < nl; i++) {
     float id = lpc_idepth[i];
@@ -663,14 +665,14 @@ Vec6 CoarseTracker::calcResPose(int lvl, const SE3 &refToNew, AffLight aff_g2l,
 
     if (lvl == 0 && i % 32 == 0) {
       // translation only (positive)
-      Vec3f ptT = Ki_[lvl] * Vec3f(x, y, 1) + t * id;
+      Vec3f ptT = Ki[lvl] * Vec3f(x, y, 1) + t * id;
       float uT = ptT[0] / ptT[2];
       float vT = ptT[1] / ptT[2];
       float KuT = fxl * uT + cxl;
       float KvT = fyl * vT + cyl;
 
       // translation only (negative)
-      Vec3f ptT2 = Ki_[lvl] * Vec3f(x, y, 1) - t * id;
+      Vec3f ptT2 = Ki[lvl] * Vec3f(x, y, 1) - t * id;
       float uT2 = ptT2[0] / ptT2[2];
       float vT2 = ptT2[1] / ptT2[2];
       float KuT2 = fxl * uT2 + cxl;
@@ -773,7 +775,7 @@ CoarseDistanceMap::CoarseDistanceMap(int ww, int hh) {
       new PointFrameResidual *[2048 * (ww * hh / (fac * fac))];
   coarseProjectionGridnum = new int[ww * hh / (fac * fac)];
 
-  w_[0] = h_[0] = 0;
+  w[0] = h[0] = 0;
 }
 
 CoarseDistanceMap::~CoarseDistanceMap() {
@@ -786,8 +788,8 @@ CoarseDistanceMap::~CoarseDistanceMap() {
 
 void CoarseDistanceMap::makeDistanceMap(
     std::vector<FrameHessian *> frameHessians, FrameHessian *frame) {
-  int w1 = w_[1];
-  int h1 = h_[1];
+  int w1 = w[1];
+  int h1 = h[1];
   int wh1 = w1 * h1;
   for (int i = 0; i < wh1; i++)
     fwdWarpedIDDistFinal[i] = 1000;
@@ -808,7 +810,7 @@ void CoarseDistanceMap::makeDistanceMap(
       Vec3f ptp = KRKi * Vec3f(ph->u, ph->v, 1) + Kt * ph->idepth_scaled;
       int u = ptp[0] / ptp[2] + 0.5f;
       int v = ptp[1] / ptp[2] + 0.5f;
-      if (!(u > 0 && v > 0 && u < w_[1] && v < h_[1]))
+      if (!(u > 0 && v > 0 && u < w[1] && v < h[1]))
         continue;
       fwdWarpedIDDistFinal[u + w1 * v] = 0;
       bfsList1[numItems] = Eigen::Vector2i(u, v);
@@ -823,8 +825,8 @@ void CoarseDistanceMap::makeInlierVotes(
     std::vector<FrameHessian *> frameHessians) {}
 
 void CoarseDistanceMap::growDistBFS(int bfsNum) {
-  assert(w_[0] != 0);
-  int w1 = w_[1], h1 = h_[1];
+  assert(w[0] != 0);
+  int w1 = w[1], h1 = h[1];
   for (int k = 1; k < 40; k++) {
     int bfsNum2 = bfsNum;
     std::swap<Eigen::Vector2i *>(bfsList1, bfsList2);
@@ -914,16 +916,16 @@ void CoarseDistanceMap::growDistBFS(int bfsNum) {
 }
 
 void CoarseDistanceMap::addIntoDistFinal(int u, int v) {
-  if (w_[0] == 0)
+  if (w[0] == 0)
     return;
   bfsList1[0] = Eigen::Vector2i(u, v);
-  fwdWarpedIDDistFinal[u + w_[1] * v] = 0;
+  fwdWarpedIDDistFinal[u + w[1] * v] = 0;
   growDistBFS(1);
 }
 
 void CoarseDistanceMap::makeK(CalibHessian *HCalib) {
-  w_[0] = wG[0];
-  h_[0] = hG[0];
+  w[0] = wG[0];
+  h[0] = hG[0];
 
   float fx[PYR_LEVELS];
   float fy[PYR_LEVELS];
@@ -936,8 +938,8 @@ void CoarseDistanceMap::makeK(CalibHessian *HCalib) {
   cy[0] = HCalib->cyl();
 
   for (int level = 1; level < pyrLevelsUsed; ++level) {
-    w_[level] = w_[0] >> level;
-    h_[level] = h_[0] >> level;
+    w[level] = w[0] >> level;
+    h[level] = h[0] >> level;
     fx[level] = fx[level - 1] * 0.5;
     fy[level] = fy[level - 1] * 0.5;
     cx[level] = (cx[0] + 0.5) / ((int)1 << level) - 0.5;

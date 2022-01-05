@@ -218,9 +218,7 @@ bool FullSystem::doStepFromBackup(float stepfacC, float stepfacT,
 
   // IMU and scale update
   if (setting_enable_imu && HCalib.imu_initialized) {
-    Vec3 stepfacSg;
-    stepfacSg.setConstant(stepfacR);
-    HCalib.setSg(HCalib.sg_backup + stepfacSg.cwiseProduct(HCalib.sg_step));
+    HCalib.setScale(HCalib.scale_backup + stepfacC * HCalib.scale_step);
 
     Vec21 pstepfac_imu;
     pstepfac_imu.segment<6>(0) = pstepfac.segment<6>(0);
@@ -262,7 +260,7 @@ bool FullSystem::doStepFromBackup(float stepfacC, float stepfacT,
 // sets linearization point.
 void FullSystem::backupState(bool backupLastStep) {
   HCalib.value_backup = HCalib.value;
-  HCalib.sg_backup = HCalib.sg;
+  HCalib.scale_backup = HCalib.scale;
   for (FrameHessian *fh : frameHessians) {
     fh->state_backup = fh->get_state();
     fh->state_imu_backup = fh->getImuState();
@@ -274,7 +272,7 @@ void FullSystem::backupState(bool backupLastStep) {
 // sets linearization point.
 void FullSystem::loadSateBackup() {
   HCalib.setValue(HCalib.value_backup);
-  HCalib.setSg(HCalib.sg_backup);
+  HCalib.setScale(HCalib.scale_backup);
   for (FrameHessian *fh : frameHessians) {
     fh->setState(fh->state_backup);
     fh->setImuState(fh->state_imu_backup);
@@ -457,16 +455,19 @@ float FullSystem::optimize(int mnumOptIts) {
       if (setting_print_imu) {
         MatXX H_tmp, J_tmp;
         VecX b_tmp, r_tmp;
-        std::vector<bool> v_tmp;
-        ef->getImuHessian(H_tmp, b_tmp, J_tmp, r_tmp, &HCalib, v_tmp, true);
+        ef->getImuHessian(H_tmp, b_tmp, J_tmp, r_tmp, &HCalib, true);
       }
-    }
 
-    if (!HCalib.scale_trapped) {
-      HCalib.tryTrapScale();
-      if (HCalib.scale_trapped) {
-        for (FrameHessian *fh : frameHessians) {
-          fh->setImuStateZero(&HCalib);
+      if (!setting_estimate_scale) {
+        HCalib.scale_trapped = true;
+      }
+
+      if (!HCalib.scale_trapped) {
+        HCalib.tryTrapScale();
+        if (HCalib.scale_trapped) {
+          for (FrameHessian *fh : frameHessians) {
+            fh->setImuStateZero(&HCalib);
+          }
         }
       }
     }

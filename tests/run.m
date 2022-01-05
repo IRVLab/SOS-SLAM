@@ -1,7 +1,7 @@
 close all
 clear
 
-types = ["SplineVIO"];
+types = ["SOS-SLAM"];
  
 % 0.066 0.056 0.142 0.131 0.129
 % 0.087 × × 0.103 0.111 ×

@@ -175,28 +175,33 @@ void FrameHessian::makeImages(float *color, CalibHessian *HCalib) {
   }
 }
 
-void FrameHessian::getImuHi(CalibHessian *HCalib, double tt, Mat36 &JsTW,
-                            Mat296 &JfTW, Mat33 &Hss, Mat2929 &Hff,
-                            Mat293 &Hfs) {
+void FrameHessian::getImuHi(CalibHessian *HCalib, double tt, Mat16 &JsTW,
+                            Mat296 &JfTW, double &Hss, Mat2929 &Hff,
+                            Mat291 &Hfs) {
   assert(tt <= 0);
   double tt2 = tt * tt;
 
   double scale_scaled = HCalib->getScaleScaled(HCalib->scale_trapped);
   Vec3 spline_acc = getSplineAcc(tt, HCalib->scale_trapped);
-  Vec3 acc_w = scale_scaled * spline_acc + HCalib->getG(HCalib->scale_trapped);
+  Vec3 acc_w = scale_scaled * spline_acc + setting_gravity;
   Mat33 rot_t_w = getSplineR_c_t(tt, HCalib->scale_trapped).transpose() *
                   get_camToWorld_evalPT().rotationMatrix().transpose();
   Mat33 rot_i_w = setting_rot_imu_cam * rot_t_w;
   Mat33 R_acc_t_hat = setting_rot_imu_cam * SO3::hat(rot_t_w * acc_w);
 
-  Eigen::Matrix<double, 6, 3> Js;
-  Js.setZero();
   // scale
+  Vec6 Js;
+  Js.setZero();
   Js.block<3, 1>(0, 0) = SCALE_SCALE * rot_i_w * spline_acc;
 
   Eigen::Matrix<double, 6, 29> Jf;
   Jf.setZero();
   // acc
+  // do not adjust dso parts when scale has not been trapped
+  if (HCalib->scale_trapped) {
+    // acc w.r.t. dso rotation
+    Jf.block<3, 3>(0, 3) = SCALE_XI_ROT * rot_i_w * SO3::hat(acc_w);
+  }
   Jf.block<3, 3>(0, 8) = SCALE_BA * Mat33::Identity(); // bias_a
   Jf.block<3, 3>(0, 14) = SCALE_SL_ROT * R_acc_t_hat * tt;
   Jf.block<3, 3>(0, 20) = SCALE_SQ_ROT * R_acc_t_hat * tt2;
@@ -209,21 +214,6 @@ void FrameHessian::getImuHi(CalibHessian *HCalib, double tt, Mat36 &JsTW,
   Jf.block<3, 3>(3, 14) = SCALE_SL_ROT * setting_rot_imu_cam;
   Jf.block<3, 3>(3, 20) = SCALE_SQ_ROT * setting_rot_imu_cam * 2 * tt;
   Jf.block<3, 3>(3, 26) = SCALE_SC_ROT * setting_rot_imu_cam * 3 * tt2;
-
-  // do not adjust gravity and dso parts when scale has not been trapped
-  if (HCalib->scale_trapped) {
-    // gravity
-    double sr, cr, sp, cp;
-    HCalib->getGSinCos(sr, cr, sp, cp, true);
-    Eigen::Matrix<double, 3, 2> J_rp;
-    J_rp.col(0) << -sp * sr, -cr, -cp * sr;
-    J_rp.col(1) << cp * cr, 0, -sp * cr;
-    J_rp *= setting_g_norm;
-    Js.block<3, 2>(0, 1) = SCALE_G * rot_i_w * J_rp;
-
-    // acc w.r.t. dso rotation
-    Jf.block<3, 3>(0, 3) = SCALE_XI_ROT * rot_i_w * SO3::hat(acc_w);
-  }
 
   JsTW = Js.transpose() * setting_weight_imu;
   JfTW = Jf.transpose() * setting_weight_imu;
@@ -240,16 +230,16 @@ void FrameHessian::setImuStateZero(CalibHessian *HCalib) {
     JfTW.clear();
     JsTW.reserve(imu_data.size());
     JfTW.reserve(imu_data.size());
-    Hss.setZero();
+    Hss = 0.0;
     Hff.setZero();
     Hfs.setZero();
     for (int i = 0; i < imu_data.size(); i++) {
       double tt = imu_data[i].timestamp - shell->timestamp;
-      Mat36 JsTWi;
+      Mat16 JsTWi;
       Mat296 JfTWi;
-      Mat33 Hssi;
+      double Hssi;
       Mat2929 Hffi;
-      Mat293 Hfsi;
+      Mat291 Hfsi;
       getImuHi(HCalib, tt, JsTWi, JfTWi, Hssi, Hffi, Hfsi);
       JsTW.push_back(JsTWi);
       JfTW.push_back(JfTWi);
@@ -331,7 +321,7 @@ bool FrameHessian::initializeImu(
       // A_s_ba.row(3 * i + 1) << acc_pred(1), 0, 1, 0;
       // A_s_ba.row(3 * i + 2) << acc_pred(2), 0, 0, 1;
       A_s_ba.segment<3>(3 * i) = acc_pred;
-      Vec3 acc_meas = all_imu_data[i].acc - rot_ti_w * HCalib->getG(true);
+      Vec3 acc_meas = all_imu_data[i].acc - rot_ti_w * setting_gravity;
       b_s_ba.segment<3>(3 * i) = acc_meas;
       // printf("Acc: %6.3f(%6.3f) %6.3f(%6.3f) %6.3f(%6.3f)\n", acc_pred(0),
       //        acc_meas(0), acc_pred(1), acc_meas(1), acc_pred(2),
@@ -346,6 +336,8 @@ bool FrameHessian::initializeImu(
       printf("initializeImu failed\n");
       return false;
     }
+
+    HCalib->setScaleScaledZero(scale);
   }
 
   if (setting_print_imu) {
@@ -355,17 +347,12 @@ bool FrameHessian::initializeImu(
 
   for (auto fh : frame_hessians) {
     fh->imu_bias.head(3).setConstant(0.0);
-  }
-
-  Vec3 sg0;
-  sg0 << scale, 0, 0;
-  HCalib->setSgZero(sg0);
-  HCalib->imu_initialized = true;
-
-  for (auto fh : frame_hessians) {
     fh->setImuStateScaled(fh->getImuStateScaled());
     fh->setImuStateZero(HCalib);
+    fh->spline_valid = true;
   }
+
+  HCalib->imu_initialized = true;
   return true;
 }
 
@@ -396,7 +383,7 @@ void FrameHessian::propagateImuState(FrameShell *last_shell,
     Aa.row(i) << 0, 2 * HCalib->getScaleScaled(),
         6 * t * HCalib->getScaleScaled();
     ba.row(i) = imu_rot_w_ti * setting_rot_imu_cam.transpose() * unbias_acc -
-                HCalib->getG();
+                setting_gravity;
     // gyro
     Ag.row(i) << 1, 2 * t, 3 * t * t;
     bg.row(i) = setting_rot_imu_cam.transpose() * unbias_gyro;
@@ -427,9 +414,9 @@ void FrameHessian::updateVel(FrameShell *last_shell) {
 }
 
 void CalibHessian::tryTrapScale() {
-  sg_zero[0] = sg[0];
+  scale_zero = scale;
 
-  scale_queue(scale_queue_i) = sg[0];
+  scale_queue(scale_queue_i) = scale;
   scale_queue_i = (scale_queue_i + 1) % 10;
 
   double var =
@@ -437,9 +424,9 @@ void CalibHessian::tryTrapScale() {
       (scale_queue - Vec10::Constant(scale_queue.mean())).squaredNorm();
   if (var < setting_scale_trap_thres) {
     scale_trapped = true;
-    sg_zero[0] = scale_queue.mean();
+    scale_zero = scale_queue.mean();
     if (setting_print_imu) {
-      printf("scale trapped to %8.5f\n", SCALE_SCALE * sg_zero[0]);
+      printf("scale trapped to %8.5f\n", SCALE_SCALE * scale_zero);
       std::cout << SCALE_SCALE * scale_queue.transpose() << std::endl;
     }
   }

@@ -31,7 +31,7 @@
 #endif
 
 #define DEBUG_PRINT false
-#define DEBUG_PLOT true
+#define DEBUG_PLOT false
 
 namespace dso {
 
@@ -42,84 +42,83 @@ ScaleOptimizer::ScaleOptimizer(int ww, int hh,
     int wl = ww >> lvl;
     int hl = hh >> lvl;
 
-    idepth_[lvl] = allocAligned<4, float>(wl * hl, ptr_to_delete_);
-    weight_sums_[lvl] = allocAligned<4, float>(wl * hl, ptr_to_delete_);
-    weight_sums_bak_[lvl] = allocAligned<4, float>(wl * hl, ptr_to_delete_);
+    idepth[lvl] = allocAligned<4, float>(wl * hl, ptrToDelete);
+    weight_sums[lvl] = allocAligned<4, float>(wl * hl, ptrToDelete);
+    weight_sums_bak[lvl] = allocAligned<4, float>(wl * hl, ptrToDelete);
 
-    pc_u_[lvl] = allocAligned<4, float>(wl * hl, ptr_to_delete_);
-    pc_v_[lvl] = allocAligned<4, float>(wl * hl, ptr_to_delete_);
-    pc_idepth_[lvl] = allocAligned<4, float>(wl * hl, ptr_to_delete_);
-    pc_color_[lvl] = allocAligned<4, float>(wl * hl, ptr_to_delete_);
+    pc_u[lvl] = allocAligned<4, float>(wl * hl, ptrToDelete);
+    pc_v[lvl] = allocAligned<4, float>(wl * hl, ptrToDelete);
+    pc_idepth[lvl] = allocAligned<4, float>(wl * hl, ptrToDelete);
+    pc_color[lvl] = allocAligned<4, float>(wl * hl, ptrToDelete);
   }
 
-  w_[0] = h_[0] = 0;
+  w[0] = h[0] = 0;
 
   // tranformation form frame0 to frame1
   Eigen::Matrix4d tfm_eigen;
   cv::Mat tfm_stereo_cv = cv::Mat(tfm_vec);
   tfm_stereo_cv = tfm_stereo_cv.reshape(0, 4);
   cv::cv2eigen(tfm_stereo_cv, tfm_eigen);
-  tfm_f1_f0_ = SE3(tfm_eigen);
+  tfmF0ToF1 = SE3(tfm_eigen);
 
   // make camera1 parameters
-  fx1_[0] = K1(0, 0);
-  fy1_[0] = K1(1, 1);
-  cx1_[0] = K1(0, 2);
-  cy1_[0] = K1(1, 2);
+  fx1[0] = K1(0, 0);
+  fy1[0] = K1(1, 1);
+  cx1[0] = K1(0, 2);
+  cy1[0] = K1(1, 2);
   for (int level = 1; level < pyrLevelsUsed; ++level) {
-    fx1_[level] = fx1_[level - 1] * 0.5;
-    fy1_[level] = fy1_[level - 1] * 0.5;
-    cx1_[level] = (cx1_[0] + 0.5) / ((int)1 << level) - 0.5;
-    cy1_[level] = (cy1_[0] + 0.5) / ((int)1 << level) - 0.5;
+    fx1[level] = fx1[level - 1] * 0.5;
+    fy1[level] = fy1[level - 1] * 0.5;
+    cx1[level] = (cx1[0] + 0.5) / ((int)1 << level) - 0.5;
+    cy1[level] = (cy1[0] + 0.5) / ((int)1 << level) - 0.5;
   }
 
   // scale warped buffers
-  scale_buf_warped_rx1_ = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  scale_buf_warped_rx2_ = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  scale_buf_warped_rx3_ = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  scale_buf_warped_dx_ = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  scale_buf_warped_dy_ = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  scale_buf_warped_residual_ = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  scale_buf_warped_weight_ = allocAligned<4, float>(ww * hh, ptr_to_delete_);
-  scale_buf_warped_ref_color_ = allocAligned<4, float>(ww * hh, ptr_to_delete_);
+  scaleBufWarped_rx1 = allocAligned<4, float>(ww * hh, ptrToDelete);
+  scaleBufWarped_rx2 = allocAligned<4, float>(ww * hh, ptrToDelete);
+  scaleBufWarped_rx3 = allocAligned<4, float>(ww * hh, ptrToDelete);
+  scaleBufWarped_dx = allocAligned<4, float>(ww * hh, ptrToDelete);
+  scaleBufWarped_dy = allocAligned<4, float>(ww * hh, ptrToDelete);
+  scaleBufWarped_residual = allocAligned<4, float>(ww * hh, ptrToDelete);
+  scaleBufWarped_weight = allocAligned<4, float>(ww * hh, ptrToDelete);
+  scaleBufWarped_ref_color = allocAligned<4, float>(ww * hh, ptrToDelete);
 }
 
 ScaleOptimizer::~ScaleOptimizer() {
-  for (float *ptr : ptr_to_delete_)
+  for (float *ptr : ptrToDelete)
     delete[] ptr;
-  ptr_to_delete_.clear();
+  ptrToDelete.clear();
 }
 
 void ScaleOptimizer::makeK(CalibHessian *HCalib) {
-  w_[0] = wG[0];
-  h_[0] = hG[0];
+  w[0] = wG[0];
+  h[0] = hG[0];
 
-  fx_[0] = HCalib->fxl();
-  fy_[0] = HCalib->fyl();
-  cx_[0] = HCalib->cxl();
-  cy_[0] = HCalib->cyl();
+  fx[0] = HCalib->fxl();
+  fy[0] = HCalib->fyl();
+  cx[0] = HCalib->cxl();
+  cy[0] = HCalib->cyl();
 
   for (int level = 1; level < pyrLevelsUsed; ++level) {
-    w_[level] = w_[0] >> level;
-    h_[level] = h_[0] >> level;
-    fx_[level] = fx_[level - 1] * 0.5;
-    fy_[level] = fy_[level - 1] * 0.5;
-    cx_[level] = (cx_[0] + 0.5) / ((int)1 << level) - 0.5;
-    cy_[level] = (cy_[0] + 0.5) / ((int)1 << level) - 0.5;
+    w[level] = w[0] >> level;
+    h[level] = h[0] >> level;
+    fx[level] = fx[level - 1] * 0.5;
+    fy[level] = fy[level - 1] * 0.5;
+    cx[level] = (cx[0] + 0.5) / ((int)1 << level) - 0.5;
+    cy[level] = (cy[0] + 0.5) / ((int)1 << level) - 0.5;
   }
 
   for (int level = 0; level < pyrLevelsUsed; ++level) {
     Mat33f K;
-    K << fx_[level], 0.0, cx_[level], 0.0, fy_[level], cy_[level], 0.0, 0.0,
-        1.0;
-    Ki_[level] = K.inverse();
+    K << fx[level], 0.0, cx[level], 0.0, fy[level], cy[level], 0.0, 0.0, 1.0;
+    Ki[level] = K.inverse();
   }
 }
 
 float ScaleOptimizer::optimizeScale(FrameHessian *fh1, float &scale,
                                     int coarsestLvl) {
   assert(coarsestLvl < 5 && coarsestLvl < pyrLevelsUsed);
-  fh1_ = fh1;
+  fhStereo = fh1;
 
   Vec5 last_residuals;
   last_residuals.setConstant(NAN);
@@ -230,26 +229,26 @@ float ScaleOptimizer::optimizeScale(FrameHessian *fh1, float &scale,
 
 void ScaleOptimizer::calcGSSSEScale(int lvl, float &H_out, float &b_out,
                                     float scale) {
-  scale_acc_.initialize();
+  scaleAcc.initialize();
 
-  __m128 fx1l = _mm_set1_ps(fx1_[lvl]);
-  __m128 fy1l = _mm_set1_ps(fy1_[lvl]);
+  __m128 fx1l = _mm_set1_ps(fx1[lvl]);
+  __m128 fy1l = _mm_set1_ps(fy1[lvl]);
 
   __m128 s = _mm_set1_ps(scale);
-  __m128 tx = _mm_set1_ps(tfm_f1_f0_.translation()[0]);
-  __m128 ty = _mm_set1_ps(tfm_f1_f0_.translation()[1]);
-  __m128 tz = _mm_set1_ps(tfm_f1_f0_.translation()[2]);
+  __m128 tx = _mm_set1_ps(tfmF0ToF1.translation()[0]);
+  __m128 ty = _mm_set1_ps(tfmF0ToF1.translation()[1]);
+  __m128 tz = _mm_set1_ps(tfmF0ToF1.translation()[2]);
 
   __m128 one = _mm_set1_ps(1);
 
-  int n = scale_buf_warped_n_;
+  int n = scaleBufWarped_n;
   assert(n % 4 == 0);
   for (int i = 0; i < n; i += 4) {
-    __m128 dxfx = _mm_mul_ps(_mm_load_ps(scale_buf_warped_dx_ + i), fx1l);
-    __m128 dyfy = _mm_mul_ps(_mm_load_ps(scale_buf_warped_dy_ + i), fy1l);
-    __m128 rx1 = _mm_load_ps(scale_buf_warped_rx1_ + i);
-    __m128 rx2 = _mm_load_ps(scale_buf_warped_rx2_ + i);
-    __m128 rx3 = _mm_load_ps(scale_buf_warped_rx3_ + i);
+    __m128 dxfx = _mm_mul_ps(_mm_load_ps(scaleBufWarped_dx + i), fx1l);
+    __m128 dyfy = _mm_mul_ps(_mm_load_ps(scaleBufWarped_dy + i), fy1l);
+    __m128 rx1 = _mm_load_ps(scaleBufWarped_rx1 + i);
+    __m128 rx2 = _mm_load_ps(scaleBufWarped_rx2 + i);
+    __m128 rx3 = _mm_load_ps(scaleBufWarped_rx3 + i);
 
     __m128 deno_sqrt = _mm_add_ps(_mm_mul_ps(s, rx3), tz);
     __m128 deno = _mm_div_ps(one, _mm_mul_ps(deno_sqrt, deno_sqrt));
@@ -257,16 +256,16 @@ void ScaleOptimizer::calcGSSSEScale(int lvl, float &H_out, float &b_out,
     __m128 xno = _mm_sub_ps(_mm_mul_ps(rx1, tz), _mm_mul_ps(rx3, tx));
     __m128 yno = _mm_sub_ps(_mm_mul_ps(rx2, tz), _mm_mul_ps(rx3, ty));
 
-    scale_acc_.updateSSE_oneed(
+    scaleAcc.updateSSE_oneed(
         _mm_add_ps(_mm_mul_ps(dxfx, _mm_mul_ps(deno, xno)),
                    _mm_mul_ps(dyfy, _mm_mul_ps(deno, yno))),
-        _mm_load_ps(scale_buf_warped_residual_ + i),
-        _mm_load_ps(scale_buf_warped_weight_ + i));
+        _mm_load_ps(scaleBufWarped_residual + i),
+        _mm_load_ps(scaleBufWarped_weight + i));
   }
 
-  scale_acc_.finish();
-  H_out = scale_acc_.hessian_(0, 0) * (1.0f / n);
-  b_out = scale_acc_.hessian_(0, 1) * (1.0f / n);
+  scaleAcc.finish();
+  H_out = scaleAcc.hessian(0, 0) * (1.0f / n);
+  b_out = scaleAcc.hessian(0, 1) * (1.0f / n);
 }
 
 Vec6 ScaleOptimizer::calcResScale(int lvl, float scale, float cutoffTH,
@@ -276,17 +275,16 @@ Vec6 ScaleOptimizer::calcResScale(int lvl, float scale, float cutoffTH,
   int numTermsInWarped = 0;
   int numSaturated = 0;
 
-  int wl = w_[lvl];
-  int hl = h_[lvl];
-  Eigen::Vector3f *dINewl = fh1_->dIp[lvl];
-  float fx1l = fx1_[lvl];
-  float fy1l = fy1_[lvl];
-  float cx1l = cx1_[lvl];
-  float cy1l = cy1_[lvl];
+  int wl = w[lvl];
+  int hl = h[lvl];
+  Eigen::Vector3f *dINewl = fhStereo->dIp[lvl];
+  float fx1l = fx1[lvl];
+  float fy1l = fy1[lvl];
+  float cx1l = cx1[lvl];
+  float cy1l = cy1[lvl];
 
-  Mat33f rot_f1_f0_K0_i =
-      (tfm_f1_f0_.rotationMatrix().cast<float>() * Ki_[lvl]);
-  Vec3f tsl_f1_f0 = (tfm_f1_f0_.translation()).cast<float>();
+  Mat33f rot_f1_f0_K0_i = (tfmF0ToF1.rotationMatrix().cast<float>() * Ki[lvl]);
+  Vec3f tsl_f1_f0 = (tfmF0ToF1.translation()).cast<float>();
 
   float sumSquaredShiftT = 0;
   float sumSquaredShiftRT = 0;
@@ -304,19 +302,19 @@ Vec6 ScaleOptimizer::calcResScale(int lvl, float scale, float cutoffTH,
 
     projImage = new MinimalImageB3(wl, hl);
     projImage->setBlack();
-    for (int i = 0; i < h_[lvl] * w_[lvl]; i++) {
-      int c = fh1_->dIp[lvl][i][0] * 0.9f;
+    for (int i = 0; i < h[lvl] * w[lvl]; i++) {
+      int c = fhStereo->dIp[lvl][i][0] * 0.9f;
       if (c > 255)
         c = 255;
       projImage->at(i) = Vec3b(c, c, c);
     }
   }
 
-  int nl = pc_n_[lvl];
-  float *lpc_u = pc_u_[lvl];
-  float *lpc_v = pc_v_[lvl];
-  float *lpc_idepth = pc_idepth_[lvl];
-  float *lpc_color = pc_color_[lvl];
+  int nl = pc_n[lvl];
+  float *lpc_u = pc_u[lvl];
+  float *lpc_v = pc_v[lvl];
+  float *lpc_idepth = pc_idepth[lvl];
+  float *lpc_color = pc_color[lvl];
 
   for (int i = 0; i < nl; i++) {
     float id = lpc_idepth[i];
@@ -334,14 +332,14 @@ Vec6 ScaleOptimizer::calcResScale(int lvl, float scale, float cutoffTH,
 
     if (lvl == 0 && i % 32 == 0) {
       // translation only (positive)
-      Vec3f ptT = scale * Ki_[lvl] * Vec3f(x, y, 1) + tsl_f1_f0 * id;
+      Vec3f ptT = scale * Ki[lvl] * Vec3f(x, y, 1) + tsl_f1_f0 * id;
       float uT = ptT[0] / ptT[2];
       float vT = ptT[1] / ptT[2];
       float KuT = fx1l * uT + cx1l;
       float KvT = fy1l * vT + cy1l;
 
       // translation only (negative)
-      Vec3f ptT2 = scale * Ki_[lvl] * Vec3f(x, y, 1) - tsl_f1_f0 * id;
+      Vec3f ptT2 = scale * Ki[lvl] * Vec3f(x, y, 1) - tsl_f1_f0 * id;
       float uT2 = ptT2[0] / ptT2[2];
       float vT2 = ptT2[1] / ptT2[2];
       float KuT2 = fx1l * uT2 + cx1l;
@@ -392,30 +390,30 @@ Vec6 ScaleOptimizer::calcResScale(int lvl, float scale, float cutoffTH,
       E += hw * residual * residual * (2 - hw);
       numTermsInE++;
 
-      scale_buf_warped_rx1_[numTermsInWarped] = rx[0];
-      scale_buf_warped_rx2_[numTermsInWarped] = rx[1];
-      scale_buf_warped_rx3_[numTermsInWarped] = rx[2];
-      scale_buf_warped_dx_[numTermsInWarped] = hitColor[1];
-      scale_buf_warped_dy_[numTermsInWarped] = hitColor[2];
-      scale_buf_warped_residual_[numTermsInWarped] = residual;
-      scale_buf_warped_weight_[numTermsInWarped] = hw;
-      scale_buf_warped_ref_color_[numTermsInWarped] = lpc_color[i];
+      scaleBufWarped_rx1[numTermsInWarped] = rx[0];
+      scaleBufWarped_rx2[numTermsInWarped] = rx[1];
+      scaleBufWarped_rx3[numTermsInWarped] = rx[2];
+      scaleBufWarped_dx[numTermsInWarped] = hitColor[1];
+      scaleBufWarped_dy[numTermsInWarped] = hitColor[2];
+      scaleBufWarped_residual[numTermsInWarped] = residual;
+      scaleBufWarped_weight[numTermsInWarped] = hw;
+      scaleBufWarped_ref_color[numTermsInWarped] = lpc_color[i];
       numTermsInWarped++;
     }
   }
 
   while (numTermsInWarped % 4 != 0) {
-    scale_buf_warped_rx1_[numTermsInWarped] = 0;
-    scale_buf_warped_rx2_[numTermsInWarped] = 0;
-    scale_buf_warped_rx3_[numTermsInWarped] = 0;
-    scale_buf_warped_dx_[numTermsInWarped] = 0;
-    scale_buf_warped_dy_[numTermsInWarped] = 0;
-    scale_buf_warped_residual_[numTermsInWarped] = 0;
-    scale_buf_warped_weight_[numTermsInWarped] = 0;
-    scale_buf_warped_ref_color_[numTermsInWarped] = 0;
+    scaleBufWarped_rx1[numTermsInWarped] = 0;
+    scaleBufWarped_rx2[numTermsInWarped] = 0;
+    scaleBufWarped_rx3[numTermsInWarped] = 0;
+    scaleBufWarped_dx[numTermsInWarped] = 0;
+    scaleBufWarped_dy[numTermsInWarped] = 0;
+    scaleBufWarped_residual[numTermsInWarped] = 0;
+    scaleBufWarped_weight[numTermsInWarped] = 0;
+    scaleBufWarped_ref_color[numTermsInWarped] = 0;
     numTermsInWarped++;
   }
-  scale_buf_warped_n_ = numTermsInWarped;
+  scaleBufWarped_n = numTermsInWarped;
 
   if (plot_img) {
     IOWrap::displayImage("Scale Residual", resImage, false);

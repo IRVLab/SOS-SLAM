@@ -88,8 +88,8 @@ class EFPoint;
 #define SCALE_BA_INVERSE (1.0f / SCALE_BA)
 #define SCALE_BG_INVERSE (1.0f / SCALE_BG)
 
-typedef Eigen::Matrix<double, 3, 6> Mat36;
-typedef Eigen::Matrix<double, 29, 3> Mat293;
+typedef Eigen::Matrix<double, 1, 6> Mat16;
+typedef Eigen::Matrix<double, 29, 1> Mat291;
 typedef Eigen::Matrix<double, 29, 6> Mat296;
 typedef Eigen::Matrix<double, 29, 29> Mat2929;
 
@@ -179,6 +179,11 @@ struct FrameHessian {
   Vec10 state; // [0-5: camToWorld-leftEps. 6-7: a,b]
   Vec10 step;
   Vec10 state_backup;
+
+  // loop closure variables
+  float dso_error;   // dso error
+  float scale_error; // scale optimization error
+  std::vector<Eigen::Vector3d> points;
 
   EIGEN_STRONG_INLINE const SE3 &get_camToWorld_evalPT() const {
     return camToWorld_evalPT;
@@ -311,6 +316,7 @@ struct FrameHessian {
   inline Vec10 getPriorZero() { return Vec10::Zero(); }
 
   // IMU state: cubic spline (3x6) and imu bias (6)
+  bool spline_valid;
   Vec21 state_imu;
   Vec21 state_imu_zero;
   Vec21 state_imu_scaled;
@@ -324,11 +330,11 @@ struct FrameHessian {
   std::vector<ImuData> imu_data;
 
   // cached Jacobians/Hessians
-  std::vector<Mat36, Eigen::aligned_allocator<Mat36>> JsTW;
+  std::vector<Mat16, Eigen::aligned_allocator<Mat16>> JsTW;
   std::vector<Mat296, Eigen::aligned_allocator<Mat296>> JfTW;
-  Mat33 Hss;
+  double Hss;
   Mat2929 Hff;
-  Mat293 Hfs;
+  Mat291 Hfs;
 
   inline void setImuData(const std::vector<Vec7> imu_data_vec7) {
     imu_data.clear();
@@ -403,8 +409,8 @@ struct FrameHessian {
     return SO3::exp(so3).matrix();
   }
 
-  void getImuHi(CalibHessian *HCalib, double tt, Mat36 &JsTW, Mat296 &JfTW,
-                Mat33 &Hss, Mat2929 &Hff, Mat293 &Hfs);
+  void getImuHi(CalibHessian *HCalib, double tt, Mat16 &JsTW, Mat296 &JfTW,
+                double &Hss, Mat2929 &Hff, Mat291 &Hfs);
 
   void setImuStateZero(CalibHessian *HCalib);
 
@@ -432,11 +438,11 @@ struct CalibHessian {
 
   bool imu_initialized;
   bool scale_trapped;
-  Vec3 sg; // 0: scale; 1-2: roll pitch
-  Vec3 sg_scaled;
-  Vec3 sg_zero;
-  Vec3 sg_backup;
-  Vec3 sg_step;
+  double scale;
+  double scale_scaled;
+  double scale_zero;
+  double scale_backup;
+  double scale_step;
 
   // for scale trapping
   Vec10 scale_queue;
@@ -528,46 +534,23 @@ struct CalibHessian {
     return Binv[c + 1] - Binv[c];
   }
 
-  inline void setSgZero(const Vec3 &sg_scaled0) {
-    sg_scaled = sg_scaled0;
-    sg = sg_scaled;
-    sg[0] *= SCALE_SCALE_INVERSE;
-    sg.tail(2) *= SCALE_G_INVERSE;
-    sg_zero = sg;
-  }
-
-  inline void setSg(const Vec3 &new_sg) {
-    sg = new_sg;
-    sg_scaled = sg;
-    sg_scaled[0] *= SCALE_SCALE;
-    sg_scaled.tail(2) *= SCALE_G;
+  inline void setScale(double new_scale) {
+    scale = new_scale;
+    scale_scaled = SCALE_SCALE * scale;
   }
 
   inline void setScaleScaled(double new_scale_scaled) {
-    sg_scaled[0] *= new_scale_scaled;
-    sg[0] = new_scale_scaled / SCALE_SCALE;
+    scale_scaled = new_scale_scaled;
+    scale = SCALE_SCALE_INVERSE * scale_scaled;
+  }
+
+  inline void setScaleScaledZero(double scale_scaled0) {
+    setScaleScaled(scale_scaled0);
+    scale_zero = scale;
   }
 
   inline double getScaleScaled(bool use_state_zero = false) {
-    return use_state_zero ? (sg_zero[0] * SCALE_SCALE) : sg_scaled[0];
-  }
-
-  inline void getGSinCos(double &sr, double &cr, double &sp, double &cp,
-                         bool use_state_zero = false) {
-    Vec2 rp =
-        use_state_zero ? (sg_zero.tail(2) * SCALE_G).eval() : sg_scaled.tail(2);
-    sr = std::sin(rp[0]);
-    cr = std::cos(rp[0]);
-    sp = std::sin(rp[1]);
-    cp = std::cos(rp[1]);
-  }
-
-  inline Vec3 getG(bool use_state_zero = false) {
-    double sr, cr, sp, cp;
-    getGSinCos(sr, cr, sp, cp, use_state_zero);
-    Vec3 G;
-    G << sp * cr, -sr, cp * cr;
-    return setting_g_norm * G;
+    return use_state_zero ? (scale_zero * SCALE_SCALE) : scale_scaled;
   }
 
   void tryTrapScale();

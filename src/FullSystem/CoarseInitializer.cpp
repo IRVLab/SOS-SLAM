@@ -77,8 +77,8 @@ CoarseInitializer::~CoarseInitializer() {
 
 void CoarseInitializer::makeCoarseDepth() {
   // make coarse tracking templates for latstRef.
-  memset(idepth_[0], 0, sizeof(float) * w_[0] * h_[0]);
-  memset(weight_sums_[0], 0, sizeof(float) * w_[0] * h_[0]);
+  memset(idepth[0], 0, sizeof(float) * w[0] * h[0]);
+  memset(weight_sums[0], 0, sizeof(float) * w[0] * h[0]);
 
   for (int lvl = 0; lvl < pyrLevelsUsed; lvl++) {
     int npts = numPoints[lvl];
@@ -89,8 +89,8 @@ void CoarseInitializer::makeCoarseDepth() {
         int v = ptsl[i].v + 0.5f;
         float id = ptsl[i].iR;
         float weight = 1.0;
-        idepth_[lvl][u + w_[lvl] * v] += id * weight;
-        weight_sums_[lvl][u + w_[lvl] * v] += weight;
+        idepth[lvl][u + w[lvl] * v] += id * weight;
+        weight_sums[lvl][u + w[lvl] * v] += weight;
       }
     }
   }
@@ -100,16 +100,16 @@ void CoarseInitializer::makeCoarseDepth() {
     int numIts = 1;
 
     for (int it = 0; it < numIts; it++) {
-      int wh = w_[lvl] * h_[lvl] - w_[lvl];
-      int wl = w_[lvl];
-      float *weightSumsl = weight_sums_[lvl];
-      float *weightSumsl_bak = weight_sums_bak_[lvl];
-      memcpy(weightSumsl_bak, weightSumsl, w_[lvl] * h_[lvl] * sizeof(float));
+      int wh = w[lvl] * h[lvl] - w[lvl];
+      int wl = w[lvl];
+      float *weightSumsl = weight_sums[lvl];
+      float *weightSumsl_bak = weight_sums_bak[lvl];
+      memcpy(weightSumsl_bak, weightSumsl, w[lvl] * h[lvl] * sizeof(float));
       // dotnt need to make a temp copy of depth, since I only
       // read values with weightSumsl>0, and write ones with
       // weightSumsl<=0.
-      float *idepthl = idepth_[lvl];
-      for (int i = w_[lvl]; i < wh; i++) {
+      float *idepthl = idepth[lvl];
+      for (int i = w[lvl]; i < wh; i++) {
         if (weightSumsl_bak[i] <= 0) {
           float sum = 0, num = 0, numn = 0;
           if (weightSumsl_bak[i + 1 + wl] > 0) {
@@ -143,16 +143,16 @@ void CoarseInitializer::makeCoarseDepth() {
 
   // dilate idepth_ by 1 (2 on lower levels).
   for (int lvl = 2; lvl < pyrLevelsUsed; lvl++) {
-    int wh = w_[lvl] * h_[lvl] - w_[lvl];
-    int wl = w_[lvl];
-    float *weightSumsl = weight_sums_[lvl];
-    float *weightSumsl_bak = weight_sums_bak_[lvl];
-    memcpy(weightSumsl_bak, weightSumsl, w_[lvl] * h_[lvl] * sizeof(float));
+    int wh = w[lvl] * h[lvl] - w[lvl];
+    int wl = w[lvl];
+    float *weightSumsl = weight_sums[lvl];
+    float *weightSumsl_bak = weight_sums_bak[lvl];
+    memcpy(weightSumsl_bak, weightSumsl, w[lvl] * h[lvl] * sizeof(float));
     float *idepthl =
-        idepth_[lvl]; // dotnt need to make a temp copy of depth,
+        idepth[lvl]; // dotnt need to make a temp copy of depth,
                       // since I only read values with weightSumsl>0,
                       // and write ones with weightSumsl<=0.
-    for (int i = w_[lvl]; i < wh; i++) {
+    for (int i = w[lvl]; i < wh; i++) {
       if (weightSumsl_bak[i] <= 0) {
         float sum = 0, num = 0, numn = 0;
         if (weightSumsl_bak[i + 1] > 0) {
@@ -185,17 +185,17 @@ void CoarseInitializer::makeCoarseDepth() {
 
   // normalize idepths and weights.
   for (int lvl = 0; lvl < pyrLevelsUsed; lvl++) {
-    float *weightSumsl = weight_sums_[lvl];
-    float *idepthl = idepth_[lvl];
+    float *weightSumsl = weight_sums[lvl];
+    float *idepthl = idepth[lvl];
     Eigen::Vector3f *dIRefl = firstFrame->dIp[lvl];
 
-    int wl = w_[lvl], hl = h_[lvl];
+    int wl = w[lvl], hl = h[lvl];
 
     int lpc_n = 0;
-    float *lpc_u = pc_u_[lvl];
-    float *lpc_v = pc_v_[lvl];
-    float *lpc_idepth = pc_idepth_[lvl];
-    float *lpc_color = pc_color_[lvl];
+    float *lpc_u = pc_u[lvl];
+    float *lpc_v = pc_v[lvl];
+    float *lpc_idepth = pc_idepth[lvl];
+    float *lpc_color = pc_color[lvl];
 
     for (int y = 2; y < hl - 2; y++)
       for (int x = 2; x < wl - 2; x++) {
@@ -219,7 +219,7 @@ void CoarseInitializer::makeCoarseDepth() {
         weightSumsl[i] = 1;
       }
 
-    pc_n_[lvl] = lpc_n;
+    pc_n[lvl] = lpc_n;
   }
 }
 
@@ -297,8 +297,8 @@ bool CoarseInitializer::trackFrame(
       Hl -= Hsc * (1 / (1 + lambda));
       Vec8f bl = b - bsc * (1 / (1 + lambda));
 
-      Hl = wM * Hl * wM * (0.01f / (w_[lvl] * h_[lvl]));
-      bl = wM * bl * (0.01f / (w_[lvl] * h_[lvl]));
+      Hl = wM * Hl * wM * (0.01f / (w[lvl] * h[lvl]));
+      bl = wM * bl * (0.01f / (w[lvl] * h[lvl]));
 
       Vec8f inc;
       if (fixAffine) {
@@ -409,7 +409,7 @@ void CoarseInitializer::debugPlot(
   if (!needCall)
     return;
 
-  int wl = w_[lvl], hl = h_[lvl];
+  int wl = w[lvl], hl = h[lvl];
   Eigen::Vector3f *colorRef = firstFrame->dIp[lvl];
 
   MinimalImageB3 iRImg(wl, hl);
@@ -451,19 +451,19 @@ Vec3f CoarseInitializer::calcResAndGS(int lvl, Mat88f &H_out, Vec8f &b_out,
                                       Mat88f &H_out_sc, Vec8f &b_out_sc,
                                       const SE3 &refToNew,
                                       AffLight refToNew_aff, bool plot) {
-  int wl = w_[lvl], hl = h_[lvl];
+  int wl = w[lvl], hl = h[lvl];
   Eigen::Vector3f *colorRef = firstFrame->dIp[lvl];
   Eigen::Vector3f *colorNew = newFrame->dIp[lvl];
 
-  Mat33f RKi = refToNew.rotationMatrix().cast<float>() * Ki_[lvl];
+  Mat33f RKi = refToNew.rotationMatrix().cast<float>() * Ki[lvl];
   Vec3f t = refToNew.translation().cast<float>();
   Eigen::Vector2f r2new_aff =
       Eigen::Vector2f(exp(refToNew_aff.a), refToNew_aff.b);
 
-  float fxl = fx_[lvl];
-  float fyl = fy_[lvl];
-  float cxl = cx_[lvl];
-  float cyl = cy_[lvl];
+  float fxl = fx[lvl];
+  float fyl = fy[lvl];
+  float cxl = cx[lvl];
+  float cyl = cy[lvl];
 
   Accumulator11 E;
   acc9.initialize();
@@ -821,28 +821,28 @@ void CoarseInitializer::setFirst(CalibHessian *HCalib,
   makeK(HCalib);
   firstFrame = newFrameHessian;
 
-  PixelSelector sel(w_[0], h_[0]);
+  PixelSelector sel(w[0], h[0]);
 
-  float *statusMap = new float[w_[0] * h_[0]];
-  bool *statusMapB = new bool[w_[0] * h_[0]];
+  float *statusMap = new float[w[0] * h[0]];
+  bool *statusMapB = new bool[w[0] * h[0]];
 
   float densities[] = {0.03, 0.05, 0.15, 0.5, 1};
   for (int lvl = 0; lvl < pyrLevelsUsed; lvl++) {
     sel.currentPotential = 3;
     int npts;
     if (lvl == 0)
-      npts = sel.makeMaps(firstFrame, statusMap, densities[lvl] * w_[0] * h_[0],
+      npts = sel.makeMaps(firstFrame, statusMap, densities[lvl] * w[0] * h[0],
                           1, false, 2);
     else
-      npts = makePixelStatus(firstFrame->dIp[lvl], statusMapB, w_[lvl], h_[lvl],
-                             densities[lvl] * w_[0] * h_[0]);
+      npts = makePixelStatus(firstFrame->dIp[lvl], statusMapB, w[lvl], h[lvl],
+                             densities[lvl] * w[0] * h[0]);
 
     if (points[lvl] != 0)
       delete[] points[lvl];
     points[lvl] = new Pnt[npts];
 
     // set idepth map to initially 1 everywhere.
-    int wl = w_[lvl], hl = h_[lvl];
+    int wl = w[lvl], hl = h[lvl];
     Pnt *pl = points[lvl];
     int nl = 0;
     for (int y = patternPadding + 1; y < hl - patternPadding - 2; y++)
@@ -861,12 +861,12 @@ void CoarseInitializer::setFirst(CalibHessian *HCalib,
           pl[nl].lastHessian_new = 0;
           pl[nl].my_type = (lvl != 0) ? 1 : statusMap[x + y * wl];
 
-          Eigen::Vector3f *cpt = firstFrame->dIp[lvl] + x + y * w_[lvl];
+          Eigen::Vector3f *cpt = firstFrame->dIp[lvl] + x + y * w[lvl];
           float sumGrad2 = 0;
           for (int idx = 0; idx < patternNum; idx++) {
             int dx = patternP[idx][0];
             int dy = patternP[idx][1];
-            float absgrad = cpt[dx + dy * w_[lvl]].tail<2>().squaredNorm();
+            float absgrad = cpt[dx + dy * w[lvl]].tail<2>().squaredNorm();
             sumGrad2 += absgrad;
           }
 

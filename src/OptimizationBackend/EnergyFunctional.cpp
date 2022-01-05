@@ -115,8 +115,8 @@ EnergyFunctional::EnergyFunctional() {
   nFrames = nResiduals = nPoints = 0;
 
   if (setting_enable_imu) {
-    HM = MatXX::Zero(CPARS + 3, CPARS + 3);
-    bM = VecX::Zero(CPARS + 3);
+    HM = MatXX::Zero(CPARS + 1, CPARS + 1);
+    bM = VecX::Zero(CPARS + 1);
   } else {
     HM = MatXX::Zero(CPARS, CPARS);
     bM = VecX::Zero(CPARS);
@@ -254,7 +254,7 @@ void EnergyFunctional::accumulateSCF_MT(MatXX &H, VecX &b, bool MT) {
 }
 
 void EnergyFunctional::expandHbtoFitImu(MatXX &H, VecX &b) {
-  int dim = CPARS + 3 + 29 * nFrames;
+  int dim = CPARS + 1 + 29 * nFrames;
   MatXX He = MatXX::Zero(dim, dim);
   VecX be = VecX::Zero(dim);
 
@@ -264,7 +264,7 @@ void EnergyFunctional::expandHbtoFitImu(MatXX &H, VecX &b) {
   be.head(CPARS) = b.head(CPARS);
   for (int i = 0; i < nFrames; i++) {
     int fi = CPARS + 8 * i;
-    int fie = CPARS + 3 + 29 * i;
+    int fie = CPARS + 1 + 29 * i;
     // H: cam - xi_ab_i
     He.block(0, fie, CPARS, 8) += H.block(0, fi, CPARS, 8);
     He.block(fie, 0, 8, CPARS) += H.block(fi, 0, 8, CPARS);
@@ -273,7 +273,7 @@ void EnergyFunctional::expandHbtoFitImu(MatXX &H, VecX &b) {
     // H: xi_ab_i - xi_ab_j
     for (int j = i + 1; j < nFrames; j++) {
       int fj = CPARS + 8 * j;
-      int fje = CPARS + 3 + 29 * j;
+      int fje = CPARS + 1 + 29 * j;
       He.block(fie, fje, 8, 8) += H.block(fi, fj, 8, 8);
       He.block(fje, fie, 8, 8) += H.block(fj, fi, 8, 8);
     }
@@ -287,7 +287,6 @@ void EnergyFunctional::expandHbtoFitImu(MatXX &H, VecX &b) {
 
 void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
                                                  MatXX &H, VecX &b,
-                                                 bool &spline_valid,
                                                  MatXX &J_cst, VecX &r_cst,
                                                  bool print) {
   assert(fi > 0);
@@ -298,8 +297,8 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
   double tpf = prv_fh->shell->timestamp - cur_fh->shell->timestamp;
   assert(tpf < 0);
   double tpf2 = tpf * tpf;
-  int cur_idx = CPARS + 3 + 29 * fi;
-  int prv_idx = CPARS + 3 + 29 * (fi - 1);
+  int cur_idx = CPARS + 1 + 29 * fi;
+  int prv_idx = CPARS + 1 + 29 * (fi - 1);
 
   /************************* imu bias error ****************************/
   Mat66 tmpH = setting_weight_imu_bias / -tpf;
@@ -316,12 +315,12 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
   b.segment<6>(prv_idx + 8) += -tmpb;
   b.segment<6>(cur_idx + 8) += tmpb;
 
-  spline_valid = (cur_fh->shell->trackingRef == prv_fh->shell) &&
-                 (-tpf < setting_maxImuInterval);
+  cur_fh->spline_valid = (cur_fh->shell->trackingRef == prv_fh->shell) &&
+                         (-tpf < setting_maxImuInterval);
   bool vel_valid = fi < (nFrames - 1);
-  if (spline_valid) {
+  if (cur_fh->spline_valid) {
     /*********************** spline constraint *************************/
-    int dim = CPARS + 3 + 29 * nFrames;
+    int dim = CPARS + 1 + 29 * nFrames;
     if (vel_valid) {
       r_cst = VecX::Zero(6);
       J_cst = MatXX::Zero(6, dim);
@@ -350,7 +349,7 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
       double tnf = cur_fh->shell->timestamp - nxt_fh->shell->timestamp;
       if ((nxt_fh->shell->trackingRef == cur_fh->shell) &&
           (-tnf < setting_maxImuInterval)) {
-        int nxt_idx = CPARS + 3 + 29 * (fi + 1);
+        int nxt_idx = CPARS + 1 + 29 * (fi + 1);
         double tnf2 = tnf * tnf;
         Vec3 d_vel_dso = (1 / tpf) * (prv_fh->PRE_camToWorld.translation() -
                                       cur_fh->PRE_camToWorld.translation()) -
@@ -377,9 +376,9 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
     size_t imu_size = cur_fh->imu_data.size();
     int count = 0;
     if (HCalib->scale_trapped) {
-      H.block<3, 3>(CPARS, CPARS) += cur_fh->Hss;
-      H.block<29, 3>(cur_idx, CPARS) += cur_fh->Hfs;
-      H.block<3, 29>(CPARS, cur_idx) += cur_fh->Hfs.transpose();
+      H(CPARS, CPARS) += cur_fh->Hss;
+      H.block<29, 1>(cur_idx, CPARS) += cur_fh->Hfs;
+      H.block<1, 29>(CPARS, cur_idx) += cur_fh->Hfs.transpose();
       H.block<29, 29>(cur_idx, cur_idx) += cur_fh->Hff;
     }
     for (int j = 0; j < imu_size; j++) {
@@ -392,7 +391,7 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
                          cur_fh->getSplineR_c_t(tt).transpose() *
                          cur_fh->PRE_worldToCam.rotationMatrix() *
                          (HCalib->getScaleScaled() * cur_fh->getSplineAcc(tt) +
-                          HCalib->getG());
+                          setting_gravity);
       imu_pred.tail(3) = setting_rot_imu_cam * cur_fh->getSplineGryo(tt);
       imu_pred += cur_fh->imu_bias;
       Vec6 imu_meas;
@@ -401,21 +400,21 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
       Vec6 r_imu = imu_pred - imu_meas;
 
       if (HCalib->scale_trapped) {
-        b.segment<3>(CPARS) += cur_fh->JsTW[j] * r_imu;
+        b(CPARS) += cur_fh->JsTW[j] * r_imu;
         b.segment<29>(cur_idx) += cur_fh->JfTW[j] * r_imu;
       } else { // not use FEJ when initialization
-        Mat36 JsTW;
+        Mat16 JsTW;
         Mat296 JfTW;
-        Mat33 Hss;
+        double Hss;
         Mat2929 Hff;
-        Mat293 Hfs;
+        Mat291 Hfs;
         cur_fh->getImuHi(HCalib, tt, JsTW, JfTW, Hss, Hff, Hfs);
-        H.block<3, 3>(CPARS, CPARS) += Hss;
-        H.block<29, 3>(cur_idx, CPARS) += Hfs;
-        H.block<3, 29>(CPARS, cur_idx) += Hfs.transpose();
+        H(CPARS, CPARS) += Hss;
+        H.block<29, 1>(cur_idx, CPARS) += Hfs;
+        H.block<1, 29>(CPARS, cur_idx) += Hfs.transpose();
         H.block<29, 29>(cur_idx, cur_idx) += Hff;
 
-        b.segment<3>(CPARS) += JsTW * r_imu;
+        b(CPARS) += JsTW * r_imu;
         b.segment<29>(cur_idx) += JfTW * r_imu;
       }
 
@@ -444,7 +443,7 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
            cur_fh->frameID, -tpf, cur_fh->imu_bias[0], cur_fh->imu_bias[1],
            cur_fh->imu_bias[2], cur_fh->imu_bias[3], cur_fh->imu_bias[4],
            cur_fh->imu_bias[5]);
-    if (spline_valid) {
+    if (cur_fh->spline_valid) {
       if (vel_valid) {
         printf("r_rv: %.0e %.0e\n", r_cst.head(3).norm(), r_cst.tail(3).norm());
       } else {
@@ -458,12 +457,11 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
 
 void EnergyFunctional::getImuHessian(MatXX &H, VecX &b, MatXX &J_cst,
                                      VecX &r_cst, CalibHessian *HCalib,
-                                     std::vector<bool> &is_spline_valid,
                                      bool print) {
   if (nFrames == 1)
     return;
 
-  int dim = CPARS + 3 + 29 * nFrames;
+  int dim = CPARS + 1 + 29 * nFrames;
 
   if (print) {
     FrameHessian *fh0 = frames[0]->data;
@@ -477,17 +475,13 @@ void EnergyFunctional::getImuHessian(MatXX &H, VecX &b, MatXX &J_cst,
   b = VecX::Zero(dim);
   std::vector<MatXX> J_cst_vec;
   std::vector<VecX> r_cst_vec;
-  is_spline_valid = std::vector<bool>(nFrames, false);
   for (int i = 1; i < nFrames; i++) {
-    bool spline_valid;
     MatXX J_cst_i;
     VecX r_cst_i;
-    getImuHessianCurrentFrame(i, HCalib, H, b, spline_valid, J_cst_i, r_cst_i,
-                              print);
-    if (spline_valid) {
+    getImuHessianCurrentFrame(i, HCalib, H, b, J_cst_i, r_cst_i, print);
+    if (frames[i]->data->spline_valid) {
       J_cst_vec.push_back(J_cst_i);
       r_cst_vec.push_back(r_cst_i);
-      is_spline_valid[i] = true;
     }
   }
 
@@ -507,9 +501,13 @@ void EnergyFunctional::getImuHessian(MatXX &H, VecX &b, MatXX &J_cst,
   }
 
   if (print) {
-    printf("scale: %5.3f (%5.3f); roll_pitch: (%6.3f, %6.3f)\n\n",
-           HCalib->getScaleScaled(), SCALE_SCALE * HCalib->sg_zero[0],
-           HCalib->sg_scaled[1], HCalib->sg_scaled[2]);
+    if (setting_estimate_scale) {
+      printf("scale: %5.3f (%5.3f)\n\n", HCalib->getScaleScaled(),
+             HCalib->getScaleScaled(true));
+    } else {
+      printf("scale: %5.3f err: %5.3f\n\n", HCalib->getScaleScaled(),
+             frames[frames.size() - 2]->data->scale_error);
+    }
   }
 }
 
@@ -687,7 +685,7 @@ EFFrame *EnergyFunctional::insertFrame(FrameHessian *fh, CalibHessian *HCalib) {
   int ndim = CPARS + 8 * nFrames;
   if (setting_enable_imu) {
     step = 29;
-    ndim = CPARS + 3 + 29 * nFrames;
+    ndim = CPARS + 1 + 29 * nFrames;
   }
   assert(HM.cols() == ndim - step);
   bM.conservativeResize(ndim);
@@ -764,9 +762,8 @@ void EnergyFunctional::marginalizeFrame(EFFrame *fh, CalibHessian *HCalib) {
   // eigenvaluesPre.data()+eigenvaluesPre.size());
   //
 
-  bool spline_valid;
   if (setting_enable_imu) {
-    int dim = CPARS + 3 + 29 * nFrames;
+    int dim = CPARS + 1 + 29 * nFrames;
     MatXX HM_change = MatXX::Zero(dim, dim);
     VecX bM_change = VecX::Zero(dim);
     MatXX J_cst;
@@ -774,36 +771,31 @@ void EnergyFunctional::marginalizeFrame(EFFrame *fh, CalibHessian *HCalib) {
     VecX delta = getStitchedDeltaF();
     VecX delta2 = VecX::Zero(dim);
     delta2.head(CPARS) = delta.head(CPARS);
-    if (setting_g_norm * setting_g_norm > 0.1) {
-      delta2.segment<3>(CPARS) = HCalib->sg - HCalib->sg_zero;
-    }
-    if (!setting_estimate_scale) {
-      delta2(CPARS) = 0;
+    if (HCalib->scale_trapped) {
+      delta2(CPARS) = HCalib->scale - HCalib->scale_zero;
     }
     // connection from fh->idx to fh->idx+1
-    getImuHessianCurrentFrame(fh->idx + 1, HCalib, HM_change, bM_change,
-                              spline_valid, J_cst, r_cst, false);
-    delta2.segment<8>(CPARS + 3 + 29 * (fh->idx + 1)) =
+    getImuHessianCurrentFrame(fh->idx + 1, HCalib, HM_change, bM_change, J_cst,
+                              r_cst, false);
+    delta2.segment<8>(CPARS + 1 + 29 * (fh->idx + 1)) =
         delta.segment<8>(CPARS + 8 * (fh->idx + 1));
     if (HCalib->scale_trapped) {
-      delta2.segment<21>(CPARS + 3 + 29 * (fh->idx + 1) + 8) =
+      delta2.segment<21>(CPARS + 1 + 29 * (fh->idx + 1) + 8) =
           frames[fh->idx + 1]->data->state_imu -
           frames[fh->idx + 1]->data->state_imu_zero;
     }
 
     if (fh->idx > 0) {
       // connection from fh->idx-1 to fh->idx
-      getImuHessianCurrentFrame(fh->idx, HCalib, HM_change, bM_change,
-                                spline_valid, J_cst, r_cst, false);
-      delta2.segment<8>(CPARS + 3 + 29 * (fh->idx - 1)) =
+      getImuHessianCurrentFrame(fh->idx, HCalib, HM_change, bM_change, J_cst,
+                                r_cst, false);
+      delta2.segment<8>(CPARS + 1 + 29 * (fh->idx - 1)) =
           delta.segment<8>(CPARS + 8 * (fh->idx - 1));
       if (HCalib->scale_trapped) {
-        delta2.segment<21>(CPARS + 3 + 29 * (fh->idx - 1) + 8) =
+        delta2.segment<21>(CPARS + 1 + 29 * (fh->idx - 1) + 8) =
             frames[fh->idx - 1]->data->state_imu -
             frames[fh->idx - 1]->data->state_imu_zero;
       }
-    } else {
-      spline_valid = false;
     }
 
     bM_change -= HM_change * delta2;
@@ -811,7 +803,7 @@ void EnergyFunctional::marginalizeFrame(EFFrame *fh, CalibHessian *HCalib) {
     bM += setting_margWeightFac * bM_change;
   }
 
-  int args_count = CPARS + (setting_enable_imu ? 3 : 0);
+  int args_count = CPARS + setting_enable_imu;
   int step = setting_enable_imu ? 29 : 8;
   int odim = args_count + nFrames * step; // old dimension
   int ndim = odim - step;                 // new dimension
@@ -842,7 +834,7 @@ void EnergyFunctional::marginalizeFrame(EFFrame *fh, CalibHessian *HCalib) {
   //	std::cout << std::setprecision(16) << "HMPre:\n" << HM << "\n\n";
 
   // discard spline parts if not constrained
-  if (setting_enable_imu && !spline_valid) {
+  if (setting_enable_imu && !((fh->idx > 0) && fh->data->spline_valid)) {
     HM = HM.topLeftCorner(odim - 15, odim - 15).eval();
     bM = bM.head(odim - 15).eval();
     step = 14;
@@ -1078,14 +1070,12 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
 
   MatXX J_cst;
   VecX r_cst;
-  std::vector<bool> is_spline_valid;
   bool imu_valid = setting_enable_imu && HCalib->imu_initialized;
-  int dim = imu_valid ? CPARS + 3 + 29 * nFrames : 8 * nFrames + CPARS;
   if (imu_valid) {
     /************************* get imu H b *****************************/
     MatXX H_imu;
     VecX b_imu;
-    getImuHessian(H_imu, b_imu, J_cst, r_cst, HCalib, is_spline_valid, false);
+    getImuHessian(H_imu, b_imu, J_cst, r_cst, HCalib, false);
 
     /************************* add dso H b *****************************/
     expandHbtoFitImu(HFinal_top, bFinal_top);
@@ -1094,21 +1084,19 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
   }
 
   /******************** add marginalized H b *************************/
+  int dim = bFinal_top.size();
   if (!setting_enable_imu || HCalib->imu_initialized) {
     VecX delta = getStitchedDeltaF();
     if (setting_enable_imu) {
       VecX delta2 = VecX::Zero(dim);
       delta2.head(CPARS) = delta.head(CPARS);
-      if (setting_g_norm * setting_g_norm > 0.1) {
-        delta2.segment<3>(CPARS) = HCalib->sg - HCalib->sg_zero;
-      }
-      if (!setting_estimate_scale) {
-        delta2(CPARS) = 0;
+      if (HCalib->scale_trapped) {
+        delta2(CPARS) = HCalib->scale - HCalib->scale_zero;
       }
       for (int i = 0; i < nFrames; i++) {
-        delta2.segment<8>(CPARS + 3 + 29 * i) = delta.segment<8>(CPARS + 8 * i);
+        delta2.segment<8>(CPARS + 1 + 29 * i) = delta.segment<8>(CPARS + 8 * i);
         if (HCalib->scale_trapped) {
-          delta2.segment<21>(CPARS + 3 + 29 * i + 8) =
+          delta2.segment<21>(CPARS + 1 + 29 * i + 8) =
               frames[i]->data->state_imu - frames[i]->data->state_imu_zero;
         }
       }
@@ -1141,17 +1129,9 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
 
     /***************** remove unconstraint states **********************/
     int vi = CPARS + setting_estimate_scale;
-    if ((setting_g_norm * setting_g_norm > 0.1) && (HCalib->scale_trapped)) {
-      HFinal_top.block(0, vi, dim, 2) =
-          HFinal_top.block(0, CPARS + 1, dim, 2).eval();
-      HFinal_top.block(vi, 0, 2, dim) =
-          HFinal_top.block(CPARS + 1, 0, 2, dim).eval();
-      bFinal_top.segment(vi, 2) = bFinal_top.segment(CPARS + 1, 2).eval();
-      vi += 2;
-    }
     for (int i = 0; i < nFrames; i++) {
-      int fi = CPARS + 3 + 29 * i;
-      int vs = is_spline_valid[i] ? 29 : 14;
+      int fi = CPARS + 1 + 29 * i;
+      int vs = frames[i]->data->spline_valid ? 29 : 14;
       HFinal_top.block(0, vi, dim, vs) =
           HFinal_top.block(0, fi, dim, vs).eval();
       HFinal_top.block(vi, 0, vs, dim) =
@@ -1159,7 +1139,7 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
       bFinal_top.segment(vi, vs) = bFinal_top.segment(fi, vs).eval();
       vi += vs;
     }
-    int fi = CPARS + 3 + 29 * nFrames;
+    int fi = CPARS + 1 + 29 * nFrames;
     HFinal_top.block(0, vi, dim, cdim) =
         HFinal_top.block(0, fi, dim, cdim).eval();
     HFinal_top.block(vi, 0, cdim, dim) =
@@ -1188,14 +1168,10 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
     VecX x_dso = VecX::Zero(CPARS + 8 * nFrames);
     x_dso.head(CPARS) = x.head(CPARS);
     int vi = CPARS;
-    HCalib->sg_step.setZero();
+    HCalib->scale_step = 0;
     if (setting_estimate_scale) {
-      HCalib->sg_step[0] = -x(vi);
+      HCalib->scale_step = -x(vi);
       vi += 1;
-    }
-    if ((setting_g_norm * setting_g_norm > 0.1) && (HCalib->scale_trapped)) {
-      HCalib->sg_step.tail(2) = -x.segment<2>(vi);
-      vi += 2;
     }
     for (int i = 0; i < nFrames; i++) {
       x_dso.segment<8>(CPARS + i * 8) = x.segment<8>(vi);
@@ -1203,7 +1179,7 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
       frames[i]->data->step_imu.setZero();
       frames[i]->data->step_imu.head(6) = -x.segment<6>(vi);
       vi += 6;
-      if (is_spline_valid[i]) {
+      if (frames[i]->data->spline_valid) {
         frames[i]->data->step_imu.tail(15) = -x.segment<15>(vi);
         vi += 15;
       }

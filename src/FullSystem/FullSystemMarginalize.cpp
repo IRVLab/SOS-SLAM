@@ -148,7 +148,9 @@ void FullSystem::marginalizeFrame(FrameHessian *frame) {
   ef->marginalizeFrame(frame->efFrame, &HCalib);
 
   // drop all observations of existing points in that frame.
-
+  static float last_dso_error = 10e5;
+  frame->dso_error = 0;
+  int energy_count = 0;
   for (FrameHessian *fh : frameHessians) {
     if (fh == frame)
       continue;
@@ -162,6 +164,9 @@ void FullSystem::marginalizeFrame(FrameHessian *frame) {
           else if (ph->lastResiduals[1].first == r)
             ph->lastResiduals[1].first = 0;
 
+          frame->dso_error += r->state_energy;
+          energy_count++;
+
           if (r->host->frameID < r->target->frameID)
             statistics_numForceDroppedResFwd++;
           else
@@ -174,6 +179,21 @@ void FullSystem::marginalizeFrame(FrameHessian *frame) {
       }
     }
   }
+  // err = err / count^2 to emphasize on the count
+  frame->dso_error = frame->dso_error / energy_count / energy_count;
+  if (energy_count == 0) {
+    printf("dso_error has zero energy count!\n");
+    frame->dso_error = 10 * last_dso_error;
+  }
+  last_dso_error = frame->dso_error;
+
+  // detect if dso is resetted
+  static int prv_existing_kf_size = -1;
+  if (prv_existing_kf_size != prevKFSize) {
+    frame->dso_error = sqrtf(-1);
+    prv_existing_kf_size = prevKFSize;
+  }
+  frame->dso_error *= DSO_ERROR_SCALE;
 
   {
     std::vector<FrameHessian *> v;
@@ -181,6 +201,8 @@ void FullSystem::marginalizeFrame(FrameHessian *frame) {
     for (IOWrap::Output3DWrapper *ow : outputWrapper)
       ow->publishKeyframes(v, true, &HCalib);
   }
+
+  loopHandler->publishKeyframes(frame, &HCalib);
 
   frame->shell->marginalizedAt = frameHessians.back()->shell->id;
   frame->shell->movedByOpt = frame->c2w_leftEps().norm();
