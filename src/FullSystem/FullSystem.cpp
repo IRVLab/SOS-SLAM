@@ -162,7 +162,7 @@ void FullSystem::printResult(std::string file) {
       continue;
 
     // scale the translation
-    if (setting_enable_imu && s->trackingRef) {
+    if (s->trackingRef) {
       s->camToTrackingRef.translation() *= s->trackingRef->scale;
       s->camToWorld = s->trackingRef->camToWorld * s->camToTrackingRef;
     }
@@ -1147,7 +1147,8 @@ float FullSystem::optimizeScale(ScaleOptimizer *scale_optimizer) {
 
   static int scale_opt_fails = 0;
 
-  assert(frameHessians.back()->shell->incoming_id == fhStereo->shell->incoming_id);
+  assert(frameHessians.back()->shell->incoming_id ==
+         fhStereo->shell->incoming_id);
 
   // find the optimal scale
   float new_scale = 1.0;
@@ -1159,8 +1160,8 @@ float FullSystem::optimizeScale(ScaleOptimizer *scale_optimizer) {
     std::vector<float> scale_guess = {0.1, 1, 5, 10, 15, 25, 30, 50};
     for (float cur_scale : scale_guess) {
       printf("Scale opt trail: scale:%f -> ", cur_scale);
-      float cur_error =
-          scale_optimizer->optimizeScale(fhStereo, cur_scale, pyrLevelsUsed - 1);
+      float cur_error = scale_optimizer->optimizeScale(fhStereo, cur_scale,
+                                                       pyrLevelsUsed - 1);
       printf("%f, error:%f\n", cur_scale, cur_error);
       if (cur_error > 0 && (scale_error < 0 || scale_error > cur_error)) {
         scale_error = cur_error;
@@ -1198,11 +1199,6 @@ float FullSystem::optimizeScale(ScaleOptimizer *scale_optimizer) {
     scaleTrapped = true;
   }
   return new_scale;
-}
-
-/* ============================ Loop closure ============================= */
-void FullSystem::setLoopHandler(LoopHandler *loop_handler) {
-  loopHandler = loop_handler;
 }
 
 int FullSystem::getTotalKFSize() {

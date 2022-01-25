@@ -154,7 +154,6 @@ public:
 
   /* ============================ Loop closure ============================= */
   SE3 curPose;
-  void setLoopHandler(LoopHandler *loop_handler);
   int getTotalKFSize();
 
 private:
@@ -287,6 +286,5 @@ private:
 
   /* ============================ Loop closure ============================= */
   int prevKFSize; // previous kf size for increasing kf id
-  LoopHandler *loopHandler;
 };
 } // namespace dso

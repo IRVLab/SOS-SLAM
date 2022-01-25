@@ -202,8 +202,6 @@ void FullSystem::marginalizeFrame(FrameHessian *frame) {
       ow->publishKeyframes(v, true, &HCalib);
   }
 
-  loopHandler->publishKeyframes(frame, &HCalib);
-
   frame->shell->marginalizedAt = frameHessians.back()->shell->id;
   frame->shell->movedByOpt = frame->c2w_leftEps().norm();
 

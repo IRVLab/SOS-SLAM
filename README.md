@@ -7,17 +7,17 @@
 - **Fast Direct Stereo Visual SLAM**, J. Mo, Md Jahidul Islam, and J. Sattar, IEEE Robotics and Automation Letters, 2022.
 - **Continuous-Time Spline Visual-Inertial Odometry**, J. Mo and J. Sattar, under review, [arXiv](https://arxiv.org/abs/2109.09035).
 
-## Dependencies
-[ROS](https://www.ros.org/), [PCL](https://pointclouds.org/), [g2o](https://github.com/RainerKuemmerle/g2o), and [DSO dependencies](https://github.com/JakobEngel/dso#21-required-dependencies) ([OpenCV](https://opencv.org/), [Pangolin](https://github.com/stevenlovegrove/Pangolin))
 
 ## Install
+0. Dependencies: [ROS](https://www.ros.org/), [PCL](https://pointclouds.org/), [g2o](https://github.com/RainerKuemmerle/g2o), and [DSO dependencies](https://github.com/JakobEngel/dso#21-required-dependencies) ([OpenCV](https://opencv.org/), [Pangolin](https://github.com/stevenlovegrove/Pangolin)).
+
 1. Build g2o library:
 ```
 cd thirdparty/g2o
 bash build.sh
 ```
 
-2. Build SOS-SLAM
+2. Build SOS-SLAM:
 ```
 cd catkin_ws/src
 git clone https://github.com/IRVLab/SOS-SLAM.git
@@ -39,8 +39,8 @@ catkin_make
 roslaunch sos_slam [YOUR_LAUNCH_FILE]
 ```
 
-Ctrl-C to terminate the program, the final trajectory (dslam.txt) will be written to ~/.ros folder.
+<!-- Ctrl-C to terminate the program, the final trajectory (dslam.txt) will be written to ~/.ros folder. -->
 
-## Output file (in ~/.ros folder)
-- dslam.txt: final trajectory [incoming_id, x, y, z];
-- sodso.txt: the trajectory without loop closure, output for comparision.
+### Published ROS Topics
+- **pose_cam0_in_world/current**: pose of the most recent frame (will be updated, minimal lagging).
+- **pose_cam0_in_world/marginalized**: pose of the most recently marginalized frame (final, will NOT be updated, several keyframes behind).

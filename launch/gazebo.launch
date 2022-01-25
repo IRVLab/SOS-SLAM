@@ -12,6 +12,6 @@
     <param name="scale_opt_thres" value="5" />
     <param name="results" value="$(arg results)" />
     <param name="weight_imu_dso" value="6" />
-    <param name="lidar_range" value="20" />
+    <param name="lidar_range" value="-1" />
   </node>
   </launch>

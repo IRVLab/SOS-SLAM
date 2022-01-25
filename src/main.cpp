@@ -53,9 +53,6 @@ private:
 
   void settingsDefault(int preset, int mode);
 
-  // loop closure
-  LoopHandler *loopHandler;
-
 public:
   bool isLost;
   std::vector<double> ttFrame;
@@ -166,11 +163,11 @@ VioNode::VioNode(int start_frame, double td_cam_imu,
         new IOWrap::PangolinSOSVIOViewer(wG[0], hG[0], true);
     fullSystem->outputWrapper.push_back(pangolinViewer);
   }
-  loopHandler = new LoopHandler(pangolinViewer);
   // setLoopHandler is called even if loop closure is disabled
   // because results are recordered by LoopHandler
   // but loop closure is disabled internally if loop closure is disabled
-  fullSystem->setLoopHandler(loopHandler);
+  IOWrap::LoopHandler *loopHandler = new IOWrap::LoopHandler(pangolinViewer);
+  fullSystem->outputWrapper.push_back(loopHandler);
 
   incomingId = 0;
 }
@@ -272,7 +269,6 @@ void VioNode::imageMessageCallback(const sensor_msgs::ImageConstPtr &msg0,
             tfmStereo, undistorter1->getK().cast<float>(), existing_kf_size);
         if (undistorter0->photometricUndist != 0)
           fullSystem->setGammaFunction(undistorter0->photometricUndist->getG());
-        fullSystem->setLoopHandler(loopHandler);
         fullSystem->outputWrapper = wraps;
         fullSystem->curPose = lastPose;
         // setting_fullResetRequested=false;

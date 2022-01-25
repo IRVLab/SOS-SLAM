@@ -25,9 +25,13 @@
 #include "FullSystem/HessianBlocks.h"
 #include "util/FrameShell.h"
 
+#include "IOWrapper/Output3DWrapper.h"
 #include "IOWrapper/Pangolin/PangolinSOSVIOViewer.h"
 #include "LoopClosure/PoseEstimator.h"
 #include "LoopClosure/ScanContext.h"
+
+#include "geometry_msgs/PoseStamped.h"
+#include "ros/ros.h"
 
 typedef std::vector<std::chrono::duration<long int, std::ratio<1, 1000000000>>>
     TimeVector;
@@ -113,12 +117,15 @@ struct LoopFrame {
   }
 };
 
-class LoopHandler {
+namespace IOWrap {
+
+class LoopHandler : public Output3DWrapper {
 public:
   LoopHandler(IOWrap::PangolinSOSVIOViewer *pangolin_viewer);
   ~LoopHandler();
 
-  void publishKeyframes(FrameHessian *fh, CalibHessian *HCalib);
+  void publishKeyframes(std::vector<FrameHessian *> &frames, bool final,
+                        CalibHessian *HCalib) override;
   void join();
 
   void savePose();
@@ -153,6 +160,13 @@ private:
   g2o::SparseOptimizer poseOptimizer;
   IOWrap::PangolinSOSVIOViewer *pangolinViewer;
   void optimize();
+
+  // ROS pose publishers
+  ros::NodeHandle rosNode;
+  ros::Publisher currentPosePublisher;
+  ros::Publisher marginalizedPosePublisher;
 };
+
+} // namespace IOWrap
 
 } // namespace dso

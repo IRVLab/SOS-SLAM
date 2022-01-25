@@ -15,12 +15,14 @@
 
 #include "LoopHandler.h"
 
-#include <fstream>
 #include "g2o/core/optimization_algorithm_levenberg.h"
 #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/solvers/eigen/linear_solver_eigen.h"
+#include <fstream>
 
 namespace dso {
+namespace IOWrap {
+
 LoopHandler::LoopHandler(IOWrap::PangolinSOSVIOViewer *pangolin_viewer)
     : pangolinViewer(pangolin_viewer) {
   // place recognition
@@ -48,11 +50,17 @@ LoopHandler::LoopHandler(IOWrap::PangolinSOSVIOViewer *pangolin_viewer)
 
   directLoopCount = 0;
   icpLoopCount = 0;
+
+  currentPosePublisher = rosNode.advertise<geometry_msgs::PoseStamped>(
+      "pose_cam0_in_world/current", 1000);
+  marginalizedPosePublisher = rosNode.advertise<geometry_msgs::PoseStamped>(
+      "pose_cam0_in_world/marginalized", 1000);
 }
 
 void LoopHandler::savePose() {
   running = false;
 
+  // TODO
   // Export the final pose graph
   std::ofstream sodso_file, dslam_file;
   sodso_file.open("sodso.txt");
@@ -134,7 +142,36 @@ void LoopHandler::optimize() {
   poseOptimizer.optimize(25);
 }
 
-void LoopHandler::publishKeyframes(FrameHessian *fh, CalibHessian *HCalib) {
+void LoopHandler::publishKeyframes(std::vector<FrameHessian *> &frames,
+                                   bool final, CalibHessian *HCalib) {
+  FrameHessian *fh = frames.back();
+
+  /******************************* Publish Pose *******************************/
+  SE3 camToWorld = fh->shell->camToWorld;
+  if (fh->shell->trackingRef) {
+    SE3 camToTrackingRef = fh->shell->camToTrackingRef;
+    camToTrackingRef.translation() *= fh->shell->trackingRef->scale;
+    camToWorld = fh->shell->trackingRef->camToWorld * camToTrackingRef;
+  }
+  geometry_msgs::PoseStamped pose_msg;
+  pose_msg.header.seq = fh->shell->incoming_id;
+  pose_msg.header.stamp = ros::Time(fh->shell->timestamp);
+  pose_msg.header.frame_id = "camera0";
+  pose_msg.pose.position.x = camToWorld.translation()(0);
+  pose_msg.pose.position.y = camToWorld.translation()(1);
+  pose_msg.pose.position.z = camToWorld.translation()(2);
+  pose_msg.pose.orientation.x = camToWorld.unit_quaternion().x();
+  pose_msg.pose.orientation.y = camToWorld.unit_quaternion().y();
+  pose_msg.pose.orientation.z = camToWorld.unit_quaternion().z();
+  pose_msg.pose.orientation.w = camToWorld.unit_quaternion().w();
+  if (!final) {
+    currentPosePublisher.publish(pose_msg);
+    return;
+  }
+  marginalizedPosePublisher.publish(pose_msg);
+
+  /******************************* Loop Closure *******************************/
+  assert(frames.size() == 1);
   float fx = HCalib->fxl();
   float fy = HCalib->fyl();
   float cx = HCalib->cxl();
@@ -339,4 +376,5 @@ void LoopHandler::run() {
   std::cout << "Finished Loop Thread" << std::endl;
 }
 
+} // namespace IOWrap
 } // namespace dso
