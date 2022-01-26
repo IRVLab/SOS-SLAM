@@ -34,6 +34,10 @@ PangolinSOSVIOViewer::PangolinSOSVIOViewer(int w_, int h_,
   running = true;
 
   boost::unique_lock<boost::mutex> lk(openImagesMutex);
+
+  internalVideoImg = new MinimalImageB3(w, h);
+  internalVideoImg->setBlack();
+
   internalKFImg = new MinimalImageB3(w, h);
   internalKFImg->setBlack();
 
@@ -72,6 +76,11 @@ void PangolinSOSVIOViewer::run() {
           .SetHandler(new pangolin::Handler3D(Visualization3D_camera));
 
   // keyframe depth visualization
+  pangolin::GlTexture texVideo(w, h, GL_RGB, false, 0, GL_RGB,
+                               GL_UNSIGNED_BYTE);
+  pangolin::View &d_video =
+      pangolin::Display("imgVideo").SetAspect(w / (float)h);
+
   pangolin::GlTexture texKFDepth(w, h, GL_RGB, false, 0, GL_RGB,
                                  GL_UNSIGNED_BYTE);
   pangolin::View &d_kfDepth = pangolin::Display("imgKFDepth").SetAspect(ratio);
@@ -86,6 +95,7 @@ void PangolinSOSVIOViewer::run() {
   pangolin::CreateDisplay()
       .SetBounds(0.0, 0.3, 0.0, 1.0)
       .SetLayout(pangolin::LayoutEqualHorizontal)
+      .AddDisplay(d_video)
       .AddDisplay(d_kfDepth)
       .AddDisplay(Visualization_lidar_display);
 
@@ -99,18 +109,28 @@ void PangolinSOSVIOViewer::run() {
     Visualization3D_display.Activate(Visualization3D_camera);
     boost::unique_lock<boost::mutex> lk3d(model3dMutex);
     // pangolin::glDrawColouredCube();
-    for (KeyFrameDisplay *fh : keyframes) {
-      fh->refreshPC();
-      fh->drawPC(1);
+    for (auto &id_fh : keyframesById) {
+      id_fh.second->refreshPC();
+      id_fh.second->drawPC(1);
+    }
+    if (!keyframesIdSorted.empty()) {
+      keyframesById[keyframesIdSorted.back()]->drawCam(2, 0, 1);
     }
     drawConstraints();
     lk3d.unlock();
 
     openImagesMutex.lock();
+    if (videoImgChanged)
+      texVideo.Upload(internalVideoImg->data, GL_BGR, GL_UNSIGNED_BYTE);
+    videoImgChanged = false;
     if (KFImgChanged)
       texKFDepth.Upload(internalKFImg->data, GL_BGR, GL_UNSIGNED_BYTE);
     KFImgChanged = false;
     openImagesMutex.unlock();
+
+    d_video.Activate();
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    texVideo.RenderToViewportFlipY();
 
     d_kfDepth.Activate();
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -125,7 +145,9 @@ void PangolinSOSVIOViewer::run() {
     pangolin::FinishFrame();
   }
 
-  exit(1);
+  if (running) {
+    exit(1);
+  }
 }
 
 void PangolinSOSVIOViewer::close() { running = false; }
@@ -141,10 +163,11 @@ void PangolinSOSVIOViewer::drawConstraints() {
   glLineWidth(3);
 
   glBegin(GL_LINE_STRIP);
-  for (unsigned int i = 0; i < keyframes.size(); i++) {
-    glVertex3f((float)keyframes[i]->tfmCToW.translation()[0],
-               (float)keyframes[i]->tfmCToW.translation()[1],
-               (float)keyframes[i]->tfmCToW.translation()[2]);
+  for (unsigned int i = 0; i < keyframesIdSorted.size(); i++) {
+    glVertex3f(
+        (float)keyframesById[keyframesIdSorted[i]]->tfmCToW.translation()[0],
+        (float)keyframesById[keyframesIdSorted[i]]->tfmCToW.translation()[1],
+        (float)keyframesById[keyframesIdSorted[i]]->tfmCToW.translation()[2]);
   }
   glEnd();
 }
@@ -158,19 +181,17 @@ void PangolinSOSVIOViewer::publishKeyframes(std::vector<FrameHessian *> &frames,
   assert(frames.size() == 1); // contains only one marginalized frame
   FrameHessian *fh = frames[0];
 
-  static int prv_id = -1;
-
-  // keep incoming id increasing
-  if (prv_id >= fh->frameID) {
-    return;
-  }
-  prv_id = fh->frameID;
-
   boost::unique_lock<boost::mutex> lk(model3dMutex);
   if (keyframesById.find(fh->frameID) == keyframesById.end()) {
-    KeyFrameDisplay *kfd = new KeyFrameDisplay();
-    keyframesById[fh->frameID] = kfd;
-    keyframes.push_back(kfd);
+    keyframesById[fh->frameID] = new KeyFrameDisplay();
+    keyframesIdSorted.push_back(fh->frameID);
+    int i = keyframesIdSorted.size() - 2;
+    while ((i >= 0) && (keyframesIdSorted[i] > keyframesIdSorted[i + 1])) {
+      size_t tmp = keyframesIdSorted[i];
+      keyframesIdSorted[i] = keyframesIdSorted[i + 1];
+      keyframesIdSorted[i + 1] = tmp;
+      i--;
+    }
   }
   keyframesById[fh->frameID]->setFromKF(fh, HCalib);
 }
@@ -203,6 +224,17 @@ void PangolinSOSVIOViewer::drawLidar() {
     glVertex3f(lidarPts[i](0), lidarPts[i](1), lidarPts[i](2));
   }
   glEnd();
+}
+
+void PangolinSOSVIOViewer::pushLiveFrame(FrameHessian *image) {
+  boost::unique_lock<boost::mutex> lk(openImagesMutex);
+
+  for (int i = 0; i < w * h; i++)
+    internalVideoImg->data[i][0] = internalVideoImg->data[i][1] =
+        internalVideoImg->data[i][2] =
+            image->dI[i][0] * 0.8 > 255.0f ? 255.0 : image->dI[i][0] * 0.8;
+
+  videoImgChanged = true;
 }
 
 void PangolinSOSVIOViewer::pushDepthImage(MinimalImageB3 *image) {

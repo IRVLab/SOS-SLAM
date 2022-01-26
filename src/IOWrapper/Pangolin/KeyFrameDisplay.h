@@ -69,6 +69,7 @@ public:
   void refreshPC();
 
   // renders cam & pointcloud.
+  void drawCam(float lineWidth = 1, float *color = 0, float sizeFactor = 1);
   void drawPC(float pointSize);
 
   int id;

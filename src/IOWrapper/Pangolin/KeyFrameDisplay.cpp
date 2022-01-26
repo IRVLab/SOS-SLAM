@@ -256,18 +256,60 @@ void KeyFrameDisplay::refreshPC() {
   if (numGlBufferGoodPoints > numGlBufferPoints) {
     numGlBufferPoints = vertexBufferNumPoints * 1.3;
     vertexBuffer.Reinitialise(pangolin::GlArrayBuffer, numGlBufferPoints,
-                                GL_FLOAT, 3, GL_DYNAMIC_DRAW);
+                              GL_FLOAT, 3, GL_DYNAMIC_DRAW);
     colorBuffer.Reinitialise(pangolin::GlArrayBuffer, numGlBufferPoints,
-                               GL_UNSIGNED_BYTE, 3, GL_DYNAMIC_DRAW);
+                             GL_UNSIGNED_BYTE, 3, GL_DYNAMIC_DRAW);
   }
   vertexBuffer.Upload(tmpVertexBuffer,
-                        sizeof(float) * 3 * numGlBufferGoodPoints, 0);
+                      sizeof(float) * 3 * numGlBufferGoodPoints, 0);
   colorBuffer.Upload(tmpColorBuffer,
-                       sizeof(unsigned char) * 3 * numGlBufferGoodPoints,
-                       0);
+                     sizeof(unsigned char) * 3 * numGlBufferGoodPoints, 0);
   bufferValid = true;
   delete[] tmpColorBuffer;
   delete[] tmpVertexBuffer;
+}
+
+void KeyFrameDisplay::drawCam(float lineWidth, float *color, float sizeFactor) {
+  if (width == 0)
+    return;
+
+  float sz = sizeFactor;
+
+  glPushMatrix();
+
+  Sophus::Matrix4f m = tfmCToW.matrix().cast<float>();
+  glMultMatrixf((GLfloat *)m.data());
+
+  if (color == 0) {
+    glColor3f(0, 0, 1);
+  } else
+    glColor3f(color[0], color[1], color[2]);
+
+  glLineWidth(lineWidth);
+  glBegin(GL_LINES);
+  glVertex3f(0, 0, 0);
+  glVertex3f(sz * (0 - cx) / fx, sz * (0 - cy) / fy, sz);
+  glVertex3f(0, 0, 0);
+  glVertex3f(sz * (0 - cx) / fx, sz * (height - 1 - cy) / fy, sz);
+  glVertex3f(0, 0, 0);
+  glVertex3f(sz * (width - 1 - cx) / fx, sz * (height - 1 - cy) / fy, sz);
+  glVertex3f(0, 0, 0);
+  glVertex3f(sz * (width - 1 - cx) / fx, sz * (0 - cy) / fy, sz);
+
+  glVertex3f(sz * (width - 1 - cx) / fx, sz * (0 - cy) / fy, sz);
+  glVertex3f(sz * (width - 1 - cx) / fx, sz * (height - 1 - cy) / fy, sz);
+
+  glVertex3f(sz * (width - 1 - cx) / fx, sz * (height - 1 - cy) / fy, sz);
+  glVertex3f(sz * (0 - cx) / fx, sz * (height - 1 - cy) / fy, sz);
+
+  glVertex3f(sz * (0 - cx) / fx, sz * (height - 1 - cy) / fy, sz);
+  glVertex3f(sz * (0 - cx) / fx, sz * (0 - cy) / fy, sz);
+
+  glVertex3f(sz * (0 - cx) / fx, sz * (0 - cy) / fy, sz);
+  glVertex3f(sz * (width - 1 - cx) / fx, sz * (0 - cy) / fy, sz);
+
+  glEnd();
+  glPopMatrix();
 }
 
 void KeyFrameDisplay::drawPC(float pointSize) {
@@ -289,8 +331,7 @@ void KeyFrameDisplay::drawPC(float pointSize) {
   glEnableClientState(GL_COLOR_ARRAY);
 
   vertexBuffer.Bind();
-  glVertexPointer(vertexBuffer.count_per_element, vertexBuffer.datatype, 0,
-                  0);
+  glVertexPointer(vertexBuffer.count_per_element, vertexBuffer.datatype, 0, 0);
   glEnableClientState(GL_VERTEX_ARRAY);
   glDrawArrays(GL_POINTS, 0, numGlBufferGoodPoints);
   glDisableClientState(GL_VERTEX_ARRAY);

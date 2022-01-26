@@ -134,8 +134,6 @@ public:
 
   float optimize(int mnumOptIts);
 
-  void printResult(std::string file);
-
   void debugPlot(std::string name);
 
   void printFrameLifetimes();
@@ -254,9 +252,9 @@ private:
                               // tracker locks [coarseTrackerSwapMutex] and
                               // swaps the two.
   CoarseTracker *coarseTrackerForNewKF; // set as as reference. protected
-                                             // by [coarseTrackerSwapMutex].
-  CoarseTracker *coarseTracker;            // always used to track new frames.
-                                             // protected by [trackMutex].
+                                        // by [coarseTrackerSwapMutex].
+  CoarseTracker *coarseTracker;         // always used to track new frames.
+                                        // protected by [trackMutex].
   float minIdJetVisTracker, maxIdJetVisTracker;
   float minIdJetVisDebug, maxIdJetVisDebug;
 

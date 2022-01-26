@@ -1,7 +1,6 @@
 <launch>
   <arg name="start_frame" default="0"/>
   <arg name="bag" default="/home/jiawei/Workspace/data/EuRoC/mh1.bag"/>
-  <arg name="results" default="$(env HOME)/Desktop/results.txt"/>
 
   <rosparam command="load" file="$(find sos_slam)/calibs/EuRoC/calib.yaml" ns="sos_slam"/>
 
@@ -14,7 +13,6 @@
     <param name="scale_opt_thres" value="12" />
     <param name="bag" value="$(arg bag)" />
     <param name="start_frame" value="$(arg start_frame)" />
-    <param name="results" value="$(arg results)" />
     <!-- <param name="nogui" value="true" /> -->
     <param name="weight_imu_dso" value="6" />
     <param name="lidar_range" value="-1" />

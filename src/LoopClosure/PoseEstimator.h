@@ -20,6 +20,9 @@
 #include "OptimizationBackend/MatrixAccumulators.h"
 #include "util/NumType.h"
 #include "util/settings.h"
+
+#include "LoopClosure/LoopHandler.h"
+
 #include "vector"
 #include <math.h>
 
@@ -27,7 +30,7 @@
 #include <pcl/point_types.h>
 #include <pcl/registration/icp.h>
 
-#define ICP_THRES 1.5
+#define ICP_THRES 0.5
 
 #define RES_THRES 10.0
 #define INNER_PERCENT 90
@@ -38,6 +41,8 @@ namespace dso {
 struct FrameHessian;
 struct PointFrameResidual;
 
+struct LoopFrame;
+
 class PoseEstimator {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -45,10 +50,9 @@ public:
   PoseEstimator(int w, int h);
   ~PoseEstimator();
 
-  bool estimate(const std::vector<std::pair<Eigen::Vector3d, float *>> &pts,
-                float ref_ab_exposure, FrameHessian *new_fh,
-                const std::vector<float> &new_cam, int coarsest_lvl,
-                Eigen::Matrix4d &ref_to_new, float &pose_error);
+  bool estimate(const LoopFrame *cur_frame, const LoopFrame *matched_frame,
+                int coarsest_lvl, Eigen::Matrix4d &ref_to_new,
+                float &pose_error);
 
   bool icp(const std::vector<Eigen::Vector3d> &pts_source,
            const std::vector<Eigen::Vector3d> &pts_target,
@@ -93,7 +97,7 @@ private:
 
   pcl::PointCloud<pcl::PointXYZ>
   transformPoints(const std::vector<Eigen::Vector3d> &pts_input,
-                  const Eigen::Matrix4d T);
+                  const Eigen::Matrix4d &tfm_target_source);
 };
 
 } // namespace dso

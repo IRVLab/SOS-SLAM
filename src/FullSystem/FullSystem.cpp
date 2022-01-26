@@ -135,48 +135,6 @@ void FullSystem::setGammaFunction(float *BInv) {
   HCalib.B[255] = 255;
 }
 
-void FullSystem::printResult(std::string file) {
-  boost::unique_lock<boost::mutex> lock(trackMutex);
-  boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
-
-  int total_opt_tt = 0;
-  for (int tt : opt_tt) {
-    total_opt_tt += tt;
-  }
-  printf("Opt tt: %.1f\n", float(total_opt_tt) / opt_tt.size());
-
-  std::ofstream myfile;
-  myfile.open(file.c_str());
-  myfile << std::setprecision(15);
-
-  // mark existing frameHessians marginalized
-  for (FrameHessian *fh : frameHessians) {
-    fh->shell->marginalizedAt = 0;
-  }
-
-  for (FrameShell *s : allFrameHistory) {
-    if (!s->poseValid)
-      continue;
-
-    if (setting_onlyLogKFPoses && s->marginalizedAt == s->id)
-      continue;
-
-    // scale the translation
-    if (s->trackingRef) {
-      s->camToTrackingRef.translation() *= s->trackingRef->scale;
-      s->camToWorld = s->trackingRef->camToWorld * s->camToTrackingRef;
-    }
-
-    myfile << s->timestamp << " " << s->camToWorld.translation().transpose()
-           << " " << s->camToWorld.so3().unit_quaternion().x() << " "
-           << s->camToWorld.so3().unit_quaternion().y() << " "
-           << s->camToWorld.so3().unit_quaternion().z() << " "
-           << s->camToWorld.so3().unit_quaternion().w() << "\n";
-  }
-  myfile.close();
-  printf("saved to %s\n", file.c_str());
-}
-
 Vec4 FullSystem::trackNewCoarse(FrameHessian *fh) {
 
   assert(allFrameHistory.size() > 2);

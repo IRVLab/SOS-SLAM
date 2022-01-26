@@ -52,6 +52,7 @@ class CalibHessian;
 class FrameShell;
 
 class ScanContext;
+class PoseEstimator;
 
 struct LoopEdge {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -71,16 +72,14 @@ struct LoopEdge {
 
 struct LoopFrame {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  int kf_id;                      // kF id, for pose graph and visualization
-  int incoming_id;                // increasing id, for ground truth
-  g2o::SE3Quat tfm_w_c;           // coordinate in pose graph
-  Eigen::Vector3d align_pt;       // alignment point when processing scan
-  Eigen::Vector3d trans_w_c_orig; // original pose for logging
-  std::vector<LoopEdge *> edges;  // pose edges associated with current frame
-  g2o::SE3Quat tfm_scan_rig;      // transformation from rig to alignment frame
+  int kf_id;                     // kF id, for pose graph and visualization
+  int incoming_id;               // increasing id, for ground truth
+  g2o::SE3Quat tfm_w_c;          // coordinate in pose graph
+  std::vector<LoopEdge *> edges; // pose edges associated with current frame
 
   // loop detection
   std::vector<std::pair<int, double>> signature; // place signature
+  g2o::SE3Quat tfm_sc_rig; // transformation from rig to alignment frame
 
   // loop correction by dso
   std::vector<std::pair<Eigen::Vector3d, float *>> pts_dso;
@@ -95,15 +94,14 @@ struct LoopFrame {
   bool graph_added;
 
   LoopFrame(FrameHessian *fh, const std::vector<float> &cam,
+            const g2o::SE3Quat &tsc,
             const std::vector<std::pair<Eigen::Vector3d, float *>> &pd,
-            const std::vector<Eigen::Vector3d> &ps, Eigen::Vector3d ap)
-      : fh(fh), pts_dso(pd), kf_id(fh->frameID),
+            const std::vector<Eigen::Vector3d> &ps)
+      : fh(fh), pts_dso(pd), kf_id(fh->frameID), tfm_sc_rig(tsc),
         incoming_id(fh->shell->incoming_id),
         tfm_w_c(g2o::SE3Quat(fh->shell->camToWorld.rotationMatrix(),
                              fh->shell->camToWorld.translation())),
-        trans_w_c_orig(tfm_w_c.translation()), cam(cam),
-        ab_exposure(fh->ab_exposure), pts_sc(ps), graph_added(false) {
-    tfm_scan_rig = g2o::SE3Quat(fh->shell->camToWorld.rotationMatrix(), -ap);
+        cam(cam), ab_exposure(fh->ab_exposure), pts_sc(ps), graph_added(false) {
   }
 
   ~LoopFrame() {
@@ -128,10 +126,7 @@ public:
                         CalibHessian *HCalib) override;
   void join();
 
-  void savePose();
-
   // statistics
-  TimeVector ptsGenerationTime;
   TimeVector scGenerationTime;
   TimeVector searchRingkeyTime;
   TimeVector searchScTime;
@@ -145,6 +140,8 @@ private:
   bool running;
   boost::thread runThread;
   void run();
+
+  void savePose();
 
   // loop detection by ScanContext
   flann::Index<flann::L2<float>> *ringkeys;
@@ -165,6 +162,9 @@ private:
   ros::NodeHandle rosNode;
   ros::Publisher currentPosePublisher;
   ros::Publisher marginalizedPosePublisher;
+
+  // variables for forward-facing camera only
+  int curFrameID;
 };
 
 } // namespace IOWrap

@@ -10,5 +10,5 @@
         <arg name="verbose" value="false"/>
     </include>
 
-    <node pkg="sos_slam" type="trajectory.py" name="trajectory"/>
+    <!-- <node pkg="sos_slam" type="trajectory.py" name="trajectory"/> -->
 </launch>

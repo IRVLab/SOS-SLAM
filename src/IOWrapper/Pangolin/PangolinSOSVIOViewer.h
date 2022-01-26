@@ -53,6 +53,8 @@ public:
 
   void refreshLidarData(const std::vector<Eigen::Vector3d> &pts, size_t cur_sz);
 
+  virtual void pushLiveFrame(FrameHessian *image) override;
+
   virtual void pushDepthImage(MinimalImageB3 *image) override;
 
   virtual void join() override;
@@ -68,7 +70,7 @@ private:
 
   // 3D model rendering
   boost::mutex model3dMutex;
-  std::vector<KeyFrameDisplay *> keyframes;
+  std::vector<size_t> keyframesIdSorted;
   std::map<int, KeyFrameDisplay *> keyframesById;
 
   // lidar rendering
@@ -78,6 +80,8 @@ private:
 
   // images rendering
   boost::mutex openImagesMutex;
+  MinimalImageB3 *internalVideoImg;
+  bool videoImgChanged;
   MinimalImageB3 *internalKFImg;
   bool KFImgChanged;
 };

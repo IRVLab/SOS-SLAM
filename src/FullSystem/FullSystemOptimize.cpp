@@ -453,9 +453,24 @@ float FullSystem::optimize(int mnumOptIts) {
       frameHessians.back()->setImuStateZero(&HCalib);
 
       if (setting_print_imu) {
-        MatXX H_tmp, J_tmp;
-        VecX b_tmp, r_tmp;
-        ef->getImuHessian(H_tmp, b_tmp, J_tmp, r_tmp, &HCalib, true);
+        // MatXX H_tmp, J_tmp;
+        // VecX b_tmp, r_tmp;
+        // ef->getImuHessian(H_tmp, b_tmp, J_tmp, r_tmp, &HCalib, true);
+        printf("\nid: %d | ba: %5.2f %5.2f %5.2f bg: %5.2f %5.2f %5.2f ",
+               frameHessians.back()->shell->incoming_id,
+               frameHessians.back()->imu_bias[0],
+               frameHessians.back()->imu_bias[1],
+               frameHessians.back()->imu_bias[2],
+               frameHessians.back()->imu_bias[3],
+               frameHessians.back()->imu_bias[4],
+               frameHessians.back()->imu_bias[5]);
+        if (setting_estimate_scale) {
+          printf("| scale: %5.3f (%5.3f) ", HCalib.getScaleScaled(),
+                 HCalib.getScaleScaled(true));
+        } else {
+          printf("| scale: %5.3f err: %5.3f ", HCalib.getScaleScaled(),
+                 frameHessians[frameHessians.size() - 2]->scale_error);
+        }
       }
 
       if (!setting_estimate_scale) {

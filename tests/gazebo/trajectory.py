@@ -40,13 +40,20 @@ if __name__ == '__main__':
         sys.exit(-1)
 
     wrench = Wrench()
-    wrench.torque = Vector3(0, 0, 0)
 
     rate = rospy.Rate(1)
+    wrench.force = Vector3(0, 0, 0)
+    wrench.torque = Vector3(0, 0, 0.0785398)
+    apply_wrench('data_rig_link', 'world', Point(0, 0, 0), wrench, rospy.Time().now(), rospy.Duration(1))
+    wrench.torque = Vector3(0, 0, 0)
+    rate.sleep()
+
+    rate = rospy.Rate(10)
+    directions = [[1,0,0], [0,1,0], [-1,0,0], [0,-1,0]]
+    # directions = [[1,0,0], [-1,0,0]]
     while True:
-        directions = [[1,0,0], [0,1,0], [-1,0,0], [0,-1,0]]
         for d in directions:
-            for t in range(-10,11,1):
-                wrench.force = Vector3(t/10*d[0],t/10*d[1],t/10*d[2])
-                apply_wrench('data_rig_link', 'world', Point(0, 0, 0), wrench, rospy.Time().now(), rospy.Duration(1))
+            for t in range(-100,101,1):
+                wrench.force = Vector3(t/100*d[0],t/100*d[1],t/100*d[2])
+                apply_wrench('data_rig_link', 'world', Point(0, 0, 0), wrench, rospy.Time().now(), rospy.Duration(0.1))
                 rate.sleep()

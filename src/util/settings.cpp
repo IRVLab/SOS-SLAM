@@ -195,8 +195,9 @@ double setting_weight_imu_dso; // factor of spline imu vs dso
 Mat66 setting_weight_imu;      // imu weight (cov^{-1})
 Mat66 setting_weight_imu_bias; // imu bias weight (cov^{-1})
 
-float setting_scale_opt_thres;    // scale optimization threshold
-float setting_lidar_range;        // lidar range for place recognition
+CamMode setting_cam_mode;      // loop detection mode (forward/downward facing)
+float setting_scale_opt_thres; // scale optimization threshold
+float setting_lidar_range;     // lidar range for place recognition
 float setting_scan_context_thres; // scan context threshold
 
 void handleKey(char k) {

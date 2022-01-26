@@ -285,26 +285,24 @@ Vec6 PoseEstimator::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l,
   return rs;
 }
 
-bool PoseEstimator::estimate(
-    const std::vector<std::pair<Eigen::Vector3d, float *>> &pts_,
-    float ref_ab_exposure, FrameHessian *new_fh,
-    const std::vector<float> &new_cam, int coarsest_lvl,
-    Eigen::Matrix4d &ref_to_new, float &pose_error) {
+bool PoseEstimator::estimate(const LoopFrame *cur_frame,
+                             const LoopFrame *matched_frame, int coarsest_lvl,
+                             Eigen::Matrix4d &ref_to_new, float &pose_error) {
   int maxIterations[] = {10, 20, 50, 50, 50};
   float lambdaExtrapolationLimit = 0.001;
   assert(coarsest_lvl < 5 && coarsest_lvl < pyrLevelsUsed);
 
-  makeK(new_cam);
-  pts = pts_;
+  makeK(cur_frame->cam);
+  pts = matched_frame->pts_dso;
 
   int lastInners[PYR_LEVELS];
   Vec5 lastResiduals;
   lastResiduals.setConstant(NAN);
 
-  newFrame = new_fh;
+  newFrame = cur_frame->fh;
 
   refAffGToL = AffLight();
-  refAbExposure = ref_ab_exposure;
+  refAbExposure = matched_frame->ab_exposure;
   AffLight aff_g2l_current = AffLight();
 
   SE3 refToNew_current(ref_to_new.block<3, 3>(0, 0),
@@ -497,7 +495,7 @@ bool PoseEstimator::estimate(
 
 pcl::PointCloud<pcl::PointXYZ>
 PoseEstimator::transformPoints(const std::vector<Eigen::Vector3d> &pts_input,
-                               const Eigen::Matrix4d T) {
+                               const Eigen::Matrix4d &tfm_target_source) {
   pcl::PointCloud<pcl::PointXYZ> pc_output;
   pc_output.width = pts_input.size();
   pc_output.height = 1;
@@ -508,7 +506,7 @@ PoseEstimator::transformPoints(const std::vector<Eigen::Vector3d> &pts_input,
   for (size_t i = 0; i < pts_input.size(); i++) {
     pt_source.head(3) = pts_input[i];
     pt_source(3) = 1.0;
-    pt_transferred = T * pt_source;
+    pt_transferred = tfm_target_source * pt_source;
     pc_output.points[i].x = pt_transferred[0];
     pc_output.points[i].y = pt_transferred[1];
     pc_output.points[i].z = pt_transferred[2];
@@ -520,12 +518,8 @@ PoseEstimator::transformPoints(const std::vector<Eigen::Vector3d> &pts_input,
 bool PoseEstimator::icp(const std::vector<Eigen::Vector3d> &pts_source,
                         const std::vector<Eigen::Vector3d> &pts_target,
                         Eigen::Matrix4d &tfm_target_source, float &icp_score) {
-
-  Eigen::Matrix4d I4;
-  I4.setIdentity();
-
   auto pc_target_ptr = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>(
-      transformPoints(pts_target, I4));
+      transformPoints(pts_target, Eigen::Matrix4d::Identity()));
   auto pc_target_source_ptr =
       boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>(
           transformPoints(pts_source, tfm_target_source));

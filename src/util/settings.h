@@ -164,6 +164,8 @@ extern double setting_weight_imu_dso;
 extern Mat66 setting_weight_imu;
 extern Mat66 setting_weight_imu_bias;
 
+enum CamMode { FORWARD_CAM, DOWNWARD_CAM };
+extern CamMode setting_cam_mode;
 extern float setting_scale_opt_thres;
 extern float setting_lidar_range;
 extern float setting_scan_context_thres;

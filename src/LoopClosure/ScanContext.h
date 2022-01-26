@@ -23,11 +23,6 @@
 #include "LoopClosure/LoopHandler.h"
 #include "util/settings.h"
 
-#define CENTER_RANGE 2.0 // find the highest point within for alignment
-#define FLANN_NN 3
-#define LOOP_MARGIN 100
-#define RINGKEY_THRES 0.1
-
 namespace dso {
 
 struct LoopFrame;
@@ -35,16 +30,15 @@ struct LoopFrame;
 class ScanContext {
 public:
   ScanContext();
-  ScanContext(int s, int r);
 
   unsigned int getHeight();
   unsigned int getWidth();
 
-  void process_scan(std::vector<Eigen::Vector3d> &pts_scan,
-                    Eigen::Vector3d &align_pt);
+  void process_scan(int cur_frame_id, const dso::SE3 &cur_wc,
+                    std::vector<Eigen::Vector3d> &pts_spherical,
+                    g2o::SE3Quat &tfm_sc_rig);
 
-  void generate(const std::vector<Eigen::Vector3d> &pts_spherical,
-                flann::Matrix<float> &ringkey, std::vector<std::pair<int, double>> &signature);
+  bool generate(LoopFrame *frame, flann::Matrix<float> &ringkey);
 
   void search_ringkey(const flann::Matrix<float> &ringkey,
                       flann::Index<flann::L2<float>> *ringkeys,
@@ -52,12 +46,24 @@ public:
 
   void search_sc(std::vector<std::pair<int, double>> &signature,
                  const std::vector<LoopFrame *> &loop_frames,
-                 const std::vector<int> &candidates, int sc_width, int &res_idx,
+                 const std::vector<int> &candidates, int &res_idx,
                  float &res_diff);
 
 private:
-  int numS;
-  int numR;
+  void getGravityByPCA(const std::vector<Eigen::Vector3d> &pts,
+                       Mat33 &rot_ned_cam);
+
+  void process_scan_forward(int cur_frame_id, const dso::SE3 &cur_wc,
+                            std::vector<Eigen::Vector3d> &pts_spherical,
+                            g2o::SE3Quat &tfm_sc_rig);
+
+  void process_scan_downward(const dso::SE3 &cur_wc,
+                             std::vector<Eigen::Vector3d> &pts_scan,
+                             g2o::SE3Quat &tfm_sc_rig);
+
+  // variables for forward-facing camera only
+  std::unordered_map<int, Eigen::Matrix<double, 6, 1>> id2pose_wc;
+  std::vector<std::pair<int, Eigen::Vector3d>> ptsNearby;
 };
 
 } // namespace dso
