@@ -539,13 +539,9 @@ struct CalibHessian {
     scale_scaled = SCALE_SCALE * scale;
   }
 
-  inline void setScaleScaled(double new_scale_scaled) {
-    scale_scaled = new_scale_scaled;
-    scale = SCALE_SCALE_INVERSE * scale_scaled;
-  }
-
   inline void setScaleScaledZero(double scale_scaled0) {
-    setScaleScaled(scale_scaled0);
+    scale_scaled = scale_scaled0;
+    scale = SCALE_SCALE_INVERSE * scale_scaled;
     scale_zero = scale;
   }
 

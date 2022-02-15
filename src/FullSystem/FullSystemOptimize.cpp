@@ -21,24 +21,23 @@
  * along with DSO. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "FullSystem.h"
+#include <algorithm>
+#include <cmath>
 
+#include <Eigen/Eigenvalues>
+#include <Eigen/LU>
+#include <Eigen/SVD>
+
+#include "FullSystem.h"
 #include "IOWrapper/ImageDisplay.h"
+#include "OptimizationBackend/EnergyFunctional.h"
+#include "OptimizationBackend/EnergyFunctionalStructs.h"
 #include "ResidualProjections.h"
 #include "stdio.h"
 #include "util/globalCalib.h"
 #include "util/globalFuncs.h"
-#include <Eigen/Eigenvalues>
-#include <Eigen/LU>
-#include <Eigen/SVD>
-#include <algorithm>
 
-#include "OptimizationBackend/EnergyFunctional.h"
-#include "OptimizationBackend/EnergyFunctionalStructs.h"
-
-#include <cmath>
-
-#include <algorithm>
+// #define DEBUG_IMU
 
 namespace dso {
 
@@ -442,6 +441,18 @@ float FullSystem::optimize(int mnumOptIts) {
       fh->shell->camToWorld = fh->PRE_camToWorld;
       fh->shell->aff_g2l = fh->aff_g2l();
     }
+
+    // set camToWorldScaled
+    for (FrameHessian *fh : frameHessians) {
+      if (fh->shell->trackingRef) {
+        SE3 camToTrackingRefScaled =
+            fh->shell->trackingRef->camToWorld.inverse() *
+            fh->shell->camToWorld;
+        camToTrackingRefScaled.translation() *= fh->shell->trackingRef->scale;
+        fh->shell->camToWorldScaled =
+            fh->shell->trackingRef->camToWorldScaled * camToTrackingRefScaled;
+      }
+    }
   }
 
   debugPlotTracking();
@@ -452,28 +463,14 @@ float FullSystem::optimize(int mnumOptIts) {
           frameHessians[frameHessians.size() - 2]->shell);
       frameHessians.back()->setImuStateZero(&HCalib);
 
-      if (setting_print_imu) {
-        // MatXX H_tmp, J_tmp;
-        // VecX b_tmp, r_tmp;
-        // ef->getImuHessian(H_tmp, b_tmp, J_tmp, r_tmp, &HCalib, true);
-        printf("\nid: %d | ba: %5.2f %5.2f %5.2f bg: %5.2f %5.2f %5.2f ",
-               frameHessians.back()->shell->incoming_id,
-               frameHessians.back()->imu_bias[0],
-               frameHessians.back()->imu_bias[1],
-               frameHessians.back()->imu_bias[2],
-               frameHessians.back()->imu_bias[3],
-               frameHessians.back()->imu_bias[4],
-               frameHessians.back()->imu_bias[5]);
-        if (setting_estimate_scale) {
-          printf("| scale: %5.3f (%5.3f) ", HCalib.getScaleScaled(),
-                 HCalib.getScaleScaled(true));
-        } else {
-          printf("| scale: %5.3f err: %5.3f ", HCalib.getScaleScaled(),
-                 frameHessians[frameHessians.size() - 2]->scale_error);
-        }
-      }
+#ifdef DEBUG_IMU
+      MatXX H_tmp, J_tmp;
+      VecX b_tmp, r_tmp;
+      ef->getImuHessian(H_tmp, b_tmp, J_tmp, r_tmp, &HCalib, true);
+      printf("\n\n");
+#endif
 
-      if (!setting_estimate_scale) {
+      if (setting_enable_scale_opt) {
         HCalib.scale_trapped = true;
       }
 

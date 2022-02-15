@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -50,8 +50,9 @@ KeyFrameDisplay::KeyFrameDisplay() {
   numGlBufferPoints = 0;
   bufferValid = false;
 }
-void KeyFrameDisplay::setFromF(FrameShell *frame, CalibHessian *HCalib) {
-  id = frame->id;
+
+void KeyFrameDisplay::setFromKF(FrameHessian *fh, CalibHessian *HCalib) {
+  id = fh->shell->id;
   fx = HCalib->fxl();
   fy = HCalib->fyl();
   cx = HCalib->cxl();
@@ -62,12 +63,6 @@ void KeyFrameDisplay::setFromF(FrameShell *frame, CalibHessian *HCalib) {
   fyi = 1 / fy;
   cxi = -cx / fx;
   cyi = -cy / fy;
-  tfmCToW = frame->camToWorld;
-  needRefresh = true;
-}
-
-void KeyFrameDisplay::setFromKF(FrameHessian *fh, CalibHessian *HCalib) {
-  setFromF(fh->shell, HCalib);
 
   // add all traces, inlier and outlier points.
   int npoints = fh->immaturePoints.size() + fh->pointHessians.size() +
@@ -90,7 +85,7 @@ void KeyFrameDisplay::setFromKF(FrameHessian *fh, CalibHessian *HCalib) {
 
     pc[numSparsePoints].u = p->u;
     pc[numSparsePoints].v = p->v;
-    pc[numSparsePoints].idpeth = (p->idepth_max + p->idepth_min) * 0.5f;
+    pc[numSparsePoints].idepth = ((p->idepth_max + p->idepth_min) * 0.5f);
     pc[numSparsePoints].idepth_hessian = 1000;
     pc[numSparsePoints].relObsBaseline = 0;
     pc[numSparsePoints].numGoodRes = 1;
@@ -103,7 +98,7 @@ void KeyFrameDisplay::setFromKF(FrameHessian *fh, CalibHessian *HCalib) {
       pc[numSparsePoints].color[i] = p->color[i];
     pc[numSparsePoints].u = p->u;
     pc[numSparsePoints].v = p->v;
-    pc[numSparsePoints].idpeth = p->idepth_scaled;
+    pc[numSparsePoints].idepth = p->idepth_scaled;
     pc[numSparsePoints].relObsBaseline = p->maxRelBaseline;
     pc[numSparsePoints].idepth_hessian = p->idepth_hessian;
     pc[numSparsePoints].numGoodRes = 0;
@@ -117,7 +112,7 @@ void KeyFrameDisplay::setFromKF(FrameHessian *fh, CalibHessian *HCalib) {
       pc[numSparsePoints].color[i] = p->color[i];
     pc[numSparsePoints].u = p->u;
     pc[numSparsePoints].v = p->v;
-    pc[numSparsePoints].idpeth = p->idepth_scaled;
+    pc[numSparsePoints].idepth = p->idepth_scaled;
     pc[numSparsePoints].relObsBaseline = p->maxRelBaseline;
     pc[numSparsePoints].idepth_hessian = p->idepth_hessian;
     pc[numSparsePoints].numGoodRes = 0;
@@ -130,7 +125,7 @@ void KeyFrameDisplay::setFromKF(FrameHessian *fh, CalibHessian *HCalib) {
       pc[numSparsePoints].color[i] = p->color[i];
     pc[numSparsePoints].u = p->u;
     pc[numSparsePoints].v = p->v;
-    pc[numSparsePoints].idpeth = p->idepth_scaled;
+    pc[numSparsePoints].idepth = p->idepth_scaled;
     pc[numSparsePoints].relObsBaseline = p->maxRelBaseline;
     pc[numSparsePoints].idepth_hessian = p->idepth_hessian;
     pc[numSparsePoints].numGoodRes = 0;
@@ -139,7 +134,7 @@ void KeyFrameDisplay::setFromKF(FrameHessian *fh, CalibHessian *HCalib) {
   }
   assert(numSparsePoints <= npoints);
 
-  tfmCToW = fh->PRE_camToWorld;
+  tfmCToW = fh->shell->camToWorldScaled;
   needRefresh = true;
 }
 
@@ -178,10 +173,10 @@ void KeyFrameDisplay::refreshPC() {
     if (myDisplayMode > 2)
       continue;
 
-    if (originalInputSparse[i].idpeth < 0)
+    if (originalInputSparse[i].idepth < 0)
       continue;
 
-    float depth = 1.0f / originalInputSparse[i].idpeth;
+    float depth = 1.0f / originalInputSparse[i].idepth;
     float depth4 = depth * depth;
     depth4 *= depth4;
     float var = (1.0f / (originalInputSparse[i].idepth_hessian + 0.01));

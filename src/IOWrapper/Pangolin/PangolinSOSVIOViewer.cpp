@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -49,6 +49,9 @@ PangolinSOSVIOViewer::PangolinSOSVIOViewer(int w_, int h_,
     runThread = boost::thread(&PangolinSOSVIOViewer::run, this);
 
   lidarCurSize = 0;
+
+  imuBa = -1;
+  imuBg = -1;
 }
 
 PangolinSOSVIOViewer::~PangolinSOSVIOViewer() {
@@ -57,7 +60,14 @@ PangolinSOSVIOViewer::~PangolinSOSVIOViewer() {
 }
 
 void PangolinSOSVIOViewer::run() {
-  pangolin::CreateWindowAndBind("SOS-SLAM", 960, 1080);
+  std::string window_name = "SOS-SLAM: ScaleOpt ";
+  window_name += setting_enable_scale_opt ? "enabled" : "disabled";
+  window_name += "; IMU ";
+  window_name += setting_enable_imu ? "enabled" : "disabled";
+  window_name += "; Loop ";
+  window_name += setting_enable_loop_closure ? "enabled" : "disabled";
+
+  pangolin::CreateWindowAndBind(window_name, 960, 1080);
   const float ratio = w / float(h);
 
   auto proj_mat =
@@ -93,11 +103,23 @@ void PangolinSOSVIOViewer::run() {
           .SetHandler(new pangolin::Handler3D(Visualization_lidar_camera));
 
   pangolin::CreateDisplay()
-      .SetBounds(0.0, 0.3, 0.0, 1.0)
+      .SetBounds(pangolin::Attach::Pix(25), 0.3, 0.0, 1.0)
       .SetLayout(pangolin::LayoutEqualHorizontal)
       .AddDisplay(d_video)
       .AddDisplay(d_kfDepth)
       .AddDisplay(Visualization_lidar_display);
+
+  pangolin::CreatePanel("ui")
+      .SetBounds(0.0, pangolin::Attach::Pix(20), 0.0, 1.0)
+      .SetLayout(pangolin::LayoutEqualHorizontal);
+
+  pangolin::Var<int> settings_frameID("ui.frame_id", 0, 0, 0, false);
+  pangolin::Var<double> settings_scaleScale("ui.|scale", 0, 0, 0, false);
+  pangolin::Var<double> settings_scaleErrInit(
+      (setting_enable_scale_opt ? "ui.|scale_err" : "ui.|scale_init"), 0, 0, 0,
+      false);
+  pangolin::Var<double> settings_imuBa("ui.|IMU_ba", 0, 0, 0, false);
+  pangolin::Var<double> settings_imuBg("ui.|IMU_bg", 0, 0, 0, false);
 
   // Default hooks for exiting (Esc) and fullscreen (tab).
   while (!pangolin::ShouldQuit() && running) {
@@ -141,6 +163,12 @@ void PangolinSOSVIOViewer::run() {
     drawLidar();
     lklidar.unlock();
 
+    settings_frameID = frameID;
+    settings_scaleScale = int(100 * scaleScale) / 100.0;
+    settings_scaleErrInit = int(100 * scaleErrInit) / 100.0;
+    settings_imuBa = int(100 * imuBa) / 100.0;
+    settings_imuBg = int(100 * imuBg) / 100.0;
+
     // Swap frames and Process Events
     pangolin::FinishFrame();
   }
@@ -175,11 +203,30 @@ void PangolinSOSVIOViewer::drawConstraints() {
 void PangolinSOSVIOViewer::publishKeyframes(std::vector<FrameHessian *> &frames,
                                             bool final, CalibHessian *HCalib) {
   // only work on marginalized frame
-  if (!final)
+  if (!final) {
+    // update frame info
+    frameID = frames.back()->shell->incoming_id;
+    scaleScale = HCalib->getScaleScaled();
+    scaleErrInit =
+        setting_enable_scale_opt
+            ? (frames.size() >= 2 ? frames[frames.size() - 2]->scale_error : -1)
+            : HCalib->getScaleScaled(true);
+    if (setting_enable_imu) {
+      imuBa = frames.back()->imu_bias.head(3).norm();
+      imuBg = frames.back()->imu_bias.tail(3).norm();
+    }
     return;
+  }
 
   assert(frames.size() == 1); // contains only one marginalized frame
   FrameHessian *fh = frames[0];
+
+  static int prv_id = -1;
+  // keep incoming id increasing
+  if (setting_cam_mode == FORWARD_CAM && prv_id >= fh->frameID) {
+    return;
+  }
+  prv_id = fh->frameID;
 
   boost::unique_lock<boost::mutex> lk(model3dMutex);
   if (keyframesById.find(fh->frameID) == keyframesById.end()) {

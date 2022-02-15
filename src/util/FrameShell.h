@@ -35,12 +35,12 @@ public:
   int incoming_id;  // ID passed into DSO
   double timestamp; // timestamp passed into DSO.
 
-  // set once after tracking
   SE3 camToTrackingRef;
   FrameShell *trackingRef;
 
   // constantly adapted.
   double scale;
+  SE3 camToWorldScaled;
   Vec3 velInWorld;
   SE3 camToWorld; // Write: TRACKING, while frame is still fresh; MAPPING: only
                   // when locked [shellPoseMutex].

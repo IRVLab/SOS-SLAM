@@ -55,15 +55,15 @@ int FrameHessian::instanceCounter = 0;
 int PointHessian::instanceCounter = 0;
 int CalibHessian::instanceCounter = 0;
 
-FullSystem::FullSystem(const std::vector<double> &tfm_stereo, const Mat33f &K1,
-                       int prev_kf_size)
+FullSystem::FullSystem(const std::vector<double> &tfm_cam1_cam0,
+                       const Mat33f &K1, int prev_kf_size)
     : prevKFSize(prev_kf_size) {
   selectionMap = new float[wG[0] * hG[0]];
 
   coarseDistanceMap = new CoarseDistanceMap(wG[0], hG[0]);
-  coarseTracker = new CoarseTracker(wG[0], hG[0], tfm_stereo, K1);
-  coarseTrackerForNewKF = new CoarseTracker(wG[0], hG[0], tfm_stereo, K1);
-  coarseInitializer = new CoarseInitializer(wG[0], hG[0], tfm_stereo, K1);
+  coarseTracker = new CoarseTracker(wG[0], hG[0], tfm_cam1_cam0, K1);
+  coarseTrackerForNewKF = new CoarseTracker(wG[0], hG[0], tfm_cam1_cam0, K1);
+  coarseInitializer = new CoarseInitializer(wG[0], hG[0], tfm_cam1_cam0, K1);
   pixelSelector = new PixelSelector(wG[0], hG[0]);
 
   statistics_lastNumOptIts = 0;
@@ -269,8 +269,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian *fh) {
       break;
   }
 
-  if (setting_enable_imu && setting_print_imu && HCalib.imu_initialized &&
-      tryIterations > 1 &&
+  if (setting_enable_imu && HCalib.imu_initialized && tryIterations > 1 &&
       (lastF_2_fh_imu.inverse() * lastF_2_fh).log().norm() > 0.1) {
     printf("IMU motion prediction is bad\n");
     std::cout << "imu " << std::fixed << std::setw(6) << std::setprecision(3)
@@ -282,8 +281,9 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian *fh) {
   }
 
   if (!haveOneGood) {
-    printf("BIG ERROR! tracking failed entirely. Take predictred pose and hope "
-           "we may somehow recover.\n");
+    printf(
+        "\nBIG ERROR! tracking failed entirely. Take predictred pose and hope "
+        "we may somehow recover.\n");
     flowVecs = Vec3(0, 0, 0);
     aff_g2l = aff_last_2_l;
     lastF_2_fh = lastF_2_fh_tries[0];
@@ -613,18 +613,20 @@ void FullSystem::flagPointsForRemoval() {
   }
 }
 
-void FullSystem::addActiveFrame(const std::vector<Vec7> &new_imu_data,
-                                ImageAndExposure *image0,
-                                ImageAndExposure *image1, int incoming_id) {
+void FullSystem::addActiveFrame(int incoming_id, ImageAndExposure *image0,
+                                ImageAndExposure *image1,
+                                const std::vector<Vec7> &new_imu_data) {
 
   if (isLost)
     return;
   boost::unique_lock<boost::mutex> lock(trackMutex);
 
-  imu_data.insert(imu_data.end(), new_imu_data.begin(), new_imu_data.end());
-  if (!initialized && coarseInitializer->frameID < 0) {
-    if (imu_data.size() < setting_min_g_imu) {
-      return;
+  if (setting_enable_imu) {
+    imu_data.insert(imu_data.end(), new_imu_data.begin(), new_imu_data.end());
+    if (!initialized && coarseInitializer->frameID < 0) {
+      if (imu_data.size() < setting_min_g_imu) {
+        return;
+      }
     }
   }
 
@@ -638,7 +640,9 @@ void FullSystem::addActiveFrame(const std::vector<Vec7> &new_imu_data,
   shell->timestamp = image0->timestamp;
   shell->incoming_id = incoming_id;
   fh->shell = shell;
-  fh->setImuData(new_imu_data);
+  if (setting_enable_imu) {
+    fh->setImuData(new_imu_data);
+  }
   allFrameHistory.push_back(shell);
 
   // make Images / derivatives etc.
@@ -649,10 +653,14 @@ void FullSystem::addActiveFrame(const std::vector<Vec7> &new_imu_data,
     // use initializer!
     // first frame set. fh is kept by coarseInitializer.
     if (coarseInitializer->frameID < 0) {
-      setStereoFrame(image1, incoming_id);
+      if (setting_enable_scale_opt) {
+        setStereoFrame(image1, incoming_id);
+      }
       coarseInitializer->setFirst(&HCalib, fh);
-      fh->setImuData(imu_data);
-      imu_data.clear();
+      if (setting_enable_imu) {
+        fh->setImuData(imu_data);
+        imu_data.clear();
+      }
     } else {
       if (coarseInitializer->trackFrame(fh, outputWrapper)) // if SNAPPED
       {
@@ -660,7 +668,9 @@ void FullSystem::addActiveFrame(const std::vector<Vec7> &new_imu_data,
         if (initFailed)
           return;
         lock.unlock();
-        setStereoFrame(image1, incoming_id);
+        if (setting_enable_scale_opt) {
+          setStereoFrame(image1, incoming_id);
+        }
         deliverTrackedFrame(fh, true);
       } else {
         // if still initializing
@@ -726,7 +736,7 @@ void FullSystem::addActiveFrame(const std::vector<Vec7> &new_imu_data,
 
     curPose = fh->shell->camToWorld;
 
-    if (needToMakeKF) {
+    if (setting_enable_scale_opt && needToMakeKF) {
       setStereoFrame(image1, incoming_id);
     }
 
@@ -788,8 +798,10 @@ void FullSystem::makeKeyFrame(FrameHessian *fh) {
   flagFramesForMarginalization(fh);
 
   // add New Frame to Hessian Struct.
-  fh->setImuData(imu_data);
-  imu_data.clear();
+  if (setting_enable_imu) {
+    fh->setImuData(imu_data);
+    imu_data.clear();
+  }
   if (setting_enable_imu && HCalib.imu_initialized) {
     fh->propagateImuState(allKeyFramesHistory.back(),
                           coarseTracker->lastRef->imu_bias, &HCalib);
@@ -845,22 +857,15 @@ void FullSystem::makeKeyFrame(FrameHessian *fh) {
           .count());
 
   // Figure Out if INITIALIZATION FAILED
-  if (allKeyFramesHistory.size() <= 4) {
-    if (allKeyFramesHistory.size() == 2 &&
-        rmse > 20 * benchmark_initializerSlackFactor) {
-      printf("I THINK INITIALIZATINO FAILED! Resetting.\n");
-      initFailed = true;
-    }
-    if (allKeyFramesHistory.size() == 3 &&
-        rmse > 13 * benchmark_initializerSlackFactor) {
-      printf("I THINK INITIALIZATINO FAILED! Resetting.\n");
-      initFailed = true;
-    }
-    if (allKeyFramesHistory.size() == 4 &&
-        rmse > 9 * benchmark_initializerSlackFactor) {
-      printf("I THINK INITIALIZATINO FAILED! Resetting.\n");
-      initFailed = true;
-    }
+  if ((allKeyFramesHistory.size() == 2 &&
+       rmse > 25 * benchmark_initializerSlackFactor) ||
+      (allKeyFramesHistory.size() == 3 &&
+       rmse > 15 * benchmark_initializerSlackFactor) ||
+      (allKeyFramesHistory.size() == 4 &&
+       rmse > 10 * benchmark_initializerSlackFactor)) {
+    printf("I THINK INITIALIZATION FAILED: KF: %zu, RMSE: %.2f\n",
+           allKeyFramesHistory.size(), rmse);
+    initFailed = true;
   }
 
   if (isLost)
@@ -890,9 +895,11 @@ void FullSystem::makeKeyFrame(FrameHessian *fh) {
   }
 
   // scale optimization
-  double new_scale = optimizeScale(coarseTrackerForNewKF);
-  if (new_scale > 0) {
-    HCalib.setScaleScaled(new_scale);
+  if (setting_enable_scale_opt) {
+    double new_scale = optimizeScale(coarseTrackerForNewKF);
+    if (new_scale > 0) {
+      HCalib.setScaleScaledZero(new_scale);
+    }
   }
 
   // debugPlot("post Optimize");
@@ -931,7 +938,6 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
   firstFrame->idx = frameHessians.size();
   frameHessians.push_back(firstFrame);
   firstFrame->frameID = allKeyFramesHistory.size() + prevKFSize;
-  ;
   allKeyFramesHistory.push_back(firstFrame->shell);
   ef->insertFrame(firstFrame, &HCalib);
   setPrecalcValues();
@@ -945,12 +951,23 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
   firstFrame->pointHessiansMarginalized.reserve(wG[0] * hG[0] * 0.2f);
   firstFrame->pointHessiansOut.reserve(wG[0] * hG[0] * 0.2f);
 
+  float sumID = 1e-5, numID = 1e-5;
+  for (int i = 0; i < coarseInitializer->numPoints[0]; i++) {
+    sumID += coarseInitializer->points[0][i].iR;
+    numID++;
+  }
+  float init_scale = sumID / numID;
+
   // get initial scale by scale optimization
-  coarseInitializer->makeCoarseDepth();
-  float init_scale = optimizeScale(coarseInitializer);
-  if (setting_scale_opt_thres > 0 && init_scale < 0) {
-    initFailed = true;
-    return;
+  HCalib.setScaleScaledZero(1.0);
+  if (setting_enable_scale_opt) {
+    coarseInitializer->makeCoarseDepth();
+    firstFrame->shell->scale = optimizeScale(coarseInitializer);
+    if (firstFrame->shell->scale > 0) {
+      init_scale = firstFrame->shell->scale;
+    } else {
+      HCalib.setScaleScaledZero(-1.0); // notify energy function
+    }
   }
 
   // randomly sub-select the points I need.
@@ -992,12 +1009,9 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
     ef->insertPoint(ph);
   }
 
-  SE3 firstToNew = coarseInitializer->thisToNext;
-  firstToNew.translation() *= init_scale;
-
   // align w.r.t. gravity
   Mat33 rot_w_i0 = Mat33::Identity();
-  if (setting_gravity.norm() > 0.1) {
+  if (setting_enable_imu) {
     Vec3 g_imu = Vec3::Zero(); // gravity in imu frame
     printf("Gravity direction estimated from %d imu data.\n",
            setting_min_g_imu);
@@ -1011,8 +1025,6 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
       }
     }
     g_imu.normalize();
-
-    HCalib.setScaleScaledZero(1);
 
     Vec3 g_world = setting_gravity.normalized();
     Vec3 rot = SO3::hat(g_imu) * g_world;
@@ -1029,6 +1041,9 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
     curPose = tfm_w_c0;
   }
 
+  SE3 firstToNew = coarseInitializer->thisToNext;
+  firstToNew.translation() *= init_scale;
+
   // really no lock required, as we are initializing.
   {
     boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
@@ -1038,6 +1053,7 @@ void FullSystem::initializeFromInitializer(FrameHessian *newFrame) {
                                  firstFrame->shell->aff_g2l);
     firstFrame->shell->trackingRef = 0;
     firstFrame->shell->camToTrackingRef = SE3();
+    firstFrame->shell->camToWorldScaled = SE3();
 
     newFrame->shell->camToWorld = curPose * firstToNew.inverse();
     newFrame->shell->aff_g2l = AffLight(0, 0);
@@ -1112,20 +1128,23 @@ float FullSystem::optimizeScale(ScaleOptimizer *scale_optimizer) {
   float new_scale = 1.0;
   float scale_error = -1;
   if (scaleTrapped) {
+    new_scale = frameHessians.back()->shell->trackingRef->scale;
     scale_error =
         scale_optimizer->optimizeScale(fhStereo, new_scale, pyrLevelsUsed - 1);
   } else {
-    std::vector<float> scale_guess = {0.1, 1, 5, 10, 15, 25, 30, 50};
+    std::vector<float> scale_guess = {0.1, 0.2, 0.5, 1, 2, 5, 10};
+    printf("Scale optimization initialization:\n");
     for (float cur_scale : scale_guess) {
-      printf("Scale opt trail: scale:%f -> ", cur_scale);
+      printf("(%4.2f->", cur_scale);
       float cur_error = scale_optimizer->optimizeScale(fhStereo, cur_scale,
                                                        pyrLevelsUsed - 1);
-      printf("%f, error:%f\n", cur_scale, cur_error);
+      printf("%4.2f: %4.1f)", cur_scale, cur_error);
       if (cur_error > 0 && (scale_error < 0 || scale_error > cur_error)) {
-        scale_error = cur_error;
         new_scale = cur_scale;
+        scale_error = cur_error;
       }
     }
+    printf("\n");
   }
   delete fhStereo->shell;
   delete fhStereo;
@@ -1150,10 +1169,11 @@ float FullSystem::optimizeScale(ScaleOptimizer *scale_optimizer) {
   // printf("Scale opt: error=%f, scale=%f, %s\n", scale_error, new_scale,
   //        scale_opt_succeed ? "accepted" : "rejected");
   if (!scale_opt_succeed) {
-    printf("Scale rejected: error=%f, scale=%f\n", scale_error, new_scale);
+    printf("Scale rejected: scale: %4.2f, err: %4.1f\n", new_scale,
+           scale_error);
     new_scale = -1.0;
   } else if (!scaleTrapped) {
-    printf("scale trapped to %.2f\n", new_scale);
+    printf("Scale trapped to %4.2f\n", new_scale);
     scaleTrapped = true;
   }
   return new_scale;

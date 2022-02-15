@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@
 namespace dso {
 
 ScaleOptimizer::ScaleOptimizer(int ww, int hh,
-                               const std::vector<double> &tfm_vec,
+                               const std::vector<double> &tfm_cam1_cam0,
                                const Mat33f &K1) {
   for (int lvl = 0; lvl < pyrLevelsUsed; lvl++) {
     int wl = ww >> lvl;
@@ -54,12 +54,14 @@ ScaleOptimizer::ScaleOptimizer(int ww, int hh,
 
   w[0] = h[0] = 0;
 
-  // tranformation form frame0 to frame1
-  Eigen::Matrix4d tfm_eigen;
-  cv::Mat tfm_stereo_cv = cv::Mat(tfm_vec);
-  tfm_stereo_cv = tfm_stereo_cv.reshape(0, 4);
-  cv::cv2eigen(tfm_stereo_cv, tfm_eigen);
-  tfmF0ToF1 = SE3(tfm_eigen);
+  if (setting_enable_scale_opt) {
+    // tranformation form frame0 to frame1
+    Eigen::Matrix4d tfm_cam1_cam0_eigen;
+    cv::Mat tfm_cam1_cam0_cv = cv::Mat(tfm_cam1_cam0);
+    tfm_cam1_cam0_cv = tfm_cam1_cam0_cv.reshape(0, 4);
+    cv::cv2eigen(tfm_cam1_cam0_cv, tfm_cam1_cam0_eigen);
+    tfmF0ToF1 = SE3(tfm_cam1_cam0_eigen);
+  }
 
   // make camera1 parameters
   fx1[0] = K1(0, 0);

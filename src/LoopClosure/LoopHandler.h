@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -99,8 +99,8 @@ struct LoopFrame {
             const std::vector<Eigen::Vector3d> &ps)
       : fh(fh), pts_dso(pd), kf_id(fh->frameID), tfm_sc_rig(tsc),
         incoming_id(fh->shell->incoming_id),
-        tfm_w_c(g2o::SE3Quat(fh->shell->camToWorld.rotationMatrix(),
-                             fh->shell->camToWorld.translation())),
+        tfm_w_c(g2o::SE3Quat(fh->shell->camToWorldScaled.rotationMatrix(),
+                             fh->shell->camToWorldScaled.translation())),
         cam(cam), ab_exposure(fh->ab_exposure), pts_sc(ps), graph_added(false) {
   }
 

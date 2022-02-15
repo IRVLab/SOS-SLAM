@@ -120,14 +120,14 @@ inline bool eigenTestNan(const MatXX &m, std::string msg) {
 class FullSystem {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  FullSystem(const std::vector<double> &tfm_stereo, const Mat33f &K1,
+  FullSystem(const std::vector<double> &tfm_cam1_cam0, const Mat33f &K1,
              int prev_kf_size = 0);
   virtual ~FullSystem();
 
   // adds a new frame, and creates point & residual structs.
-  void addActiveFrame(const std::vector<Vec7> &new_imu_data,
-                      ImageAndExposure *image0, ImageAndExposure *image1,
-                      int incoming_id);
+  void addActiveFrame(int incoming_id, ImageAndExposure *image0,
+                      ImageAndExposure *image1,
+                      const std::vector<Vec7> &new_imu_data);
 
   // marginalizes a frame. drops / marginalizes points & residuals.
   void marginalizeFrame(FrameHessian *frame);

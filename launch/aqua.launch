@@ -1,20 +1,15 @@
 <launch>
-  <arg name="start_frame" default="0"/>
   <arg name="bag" default="/home/jiawei/Workspace/data/Aqua/s1-back-forth.bag"/>
+  <arg name="start_frame" default="20"/>
 
   <rosparam command="load" file="$(find sos_slam)/calibs/Aqua/calib.yaml" ns="sos_slam"/>
 
   <node name="sos_slam" pkg="sos_slam" type="sos_slam_node" output="screen" required="true">
-    <param name="imu_topic" value="/aqua/imu" />
-    <param name="cam0_topic" value="/camera_front_left/image_raw" />
-    <param name="cam1_topic" value="/camera_front_right/image_raw" />
     <param name="calib0" value="$(find sos_slam)/calibs/Aqua/camera0.txt" />
     <param name="calib1" value="$(find sos_slam)/calibs/Aqua/camera1.txt" />
-    <param name="scale_opt_thres" value="12" />
     <param name="bag" value="$(arg bag)" />
     <param name="start_frame" value="$(arg start_frame)" />
-    <!-- <param name="nogui" value="true" /> -->
-    <param name="weight_imu_dso" value="-1" />
-    <param name="g_norm" value="0" />
+    <param name="scale_opt_thres" value="13" />
+    <param name="weight_imu_dso" value="0.001" />
   </node>
   </launch>

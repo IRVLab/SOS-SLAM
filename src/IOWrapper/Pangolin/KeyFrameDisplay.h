@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@ namespace IOWrap {
 template <int ppp> struct InputPointSparse {
   float u;
   float v;
-  float idpeth;
+  float idepth;
   float idepth_hessian;
   float relObsBaseline;
   int numGoodRes;
@@ -59,10 +59,6 @@ public:
   // copies points from KF over to internal buffer,
   // keeping some additional information so we can render it differently.
   void setFromKF(FrameHessian *fh, CalibHessian *HCalib);
-
-  // copies points from KF over to internal buffer,
-  // keeping some additional information so we can render it differently.
-  void setFromF(FrameShell *fs, CalibHessian *HCalib);
 
   // copies & filters internal data to GL buffer for rendering. if nothing to
   // do: does nothing.

@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -50,8 +50,8 @@ public:
                  float &res_diff);
 
 private:
-  void getGravityByPCA(const std::vector<Eigen::Vector3d> &pts,
-                       Mat33 &rot_ned_cam);
+  void getAlignTfmByPCA(const std::vector<Eigen::Vector3d> &pts,
+                        Mat44 &tfm_ned_cam);
 
   void process_scan_forward(int cur_frame_id, const dso::SE3 &cur_wc,
                             std::vector<Eigen::Vector3d> &pts_spherical,

@@ -181,9 +181,9 @@ bool setting_debugout_runquiet = false;
 int sparsityFactor =
     5; // not actually a setting, only some legacy stuff for coarse initializer.
 
-bool setting_enable_imu = true;
-bool setting_estimate_scale = true;
-bool setting_print_imu = true;
+bool setting_enable_imu;
+bool setting_enable_scale_opt;
+bool setting_enable_loop_closure;
 
 int setting_min_g_imu = 40;         // minimal # of imu data for gravity est.
 float setting_maxImuInterval = 0.5; // max time interval (seconds) for spline
@@ -199,6 +199,9 @@ CamMode setting_cam_mode;      // loop detection mode (forward/downward facing)
 float setting_scale_opt_thres; // scale optimization threshold
 float setting_lidar_range;     // lidar range for place recognition
 float setting_scan_context_thres; // scan context threshold
+float setting_loop_direct_thres;  // loop estimation thres. by direct alignment
+bool setting_loop_force_icp;      // force to use ICP for loop estimation
+float setting_loop_icp_thres;     // loop estimation threshold by ICP
 
 void handleKey(char k) {
   char kkk = k;

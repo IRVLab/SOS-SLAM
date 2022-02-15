@@ -100,7 +100,6 @@ public:
            Eigen::aligned_allocator<std::pair<const uint64_t, Eigen::Vector2i>>>
       connectivityMap;
 
-  // ToDo: move to private
   void getImuHessian(MatXX &H, VecX &b, MatXX &J_cst, VecX &r_cst,
                      CalibHessian *HCalib, bool print = false);
 

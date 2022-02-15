@@ -425,12 +425,13 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
         if (count >= (imu_size / 5) || j == (imu_size - 1)) {
           imu_pred_ave /= count;
           imu_meas_ave /= count;
-          printf("imu (%5.2f): %5.2f (%5.2f) %6.2f (%6.2f) %5.2f (%5.2f) %5.2f "
-                 "(%5.2f) %5.2f (%5.2f) %5.2f (%5.2f) \n",
-                 tt, imu_pred_ave[0], imu_meas_ave[0], imu_pred_ave[1],
-                 imu_meas_ave[1], imu_pred_ave[2], imu_meas_ave[2],
-                 imu_pred_ave[3], imu_meas_ave[3], imu_pred_ave[4],
-                 imu_meas_ave[4], imu_pred_ave[5], imu_meas_ave[5]);
+          printf(
+              "\nimu (%5.2f): %5.2f (%5.2f) %6.2f (%6.2f) %5.2f (%5.2f) %5.2f "
+              "(%5.2f) %5.2f (%5.2f) %5.2f (%5.2f)",
+              tt, imu_pred_ave[0], imu_meas_ave[0], imu_pred_ave[1],
+              imu_meas_ave[1], imu_pred_ave[2], imu_meas_ave[2],
+              imu_pred_ave[3], imu_meas_ave[3], imu_pred_ave[4],
+              imu_meas_ave[4], imu_pred_ave[5], imu_meas_ave[5]);
           imu_pred_ave.setZero();
           imu_meas_ave.setZero();
           count = 0;
@@ -439,18 +440,16 @@ void EnergyFunctional::getImuHessianCurrentFrame(int fi, CalibHessian *HCalib,
     }
   }
   if (print) {
-    printf("id: %d dt: %4.2f ba: %5.2f %5.2f %5.2f bg: %5.2f %5.2f %5.2f ",
+    printf("\nid: %d dt: %4.2f ba: %4.1f %4.1f %4.1f bg: %4.1f %4.1f %4.1f ",
            cur_fh->frameID, -tpf, cur_fh->imu_bias[0], cur_fh->imu_bias[1],
            cur_fh->imu_bias[2], cur_fh->imu_bias[3], cur_fh->imu_bias[4],
            cur_fh->imu_bias[5]);
     if (cur_fh->spline_valid) {
       if (vel_valid) {
-        printf("r_rv: %.0e %.0e\n", r_cst.head(3).norm(), r_cst.tail(3).norm());
+        printf("r_rv: %.0e %.0e", r_cst.head(3).norm(), r_cst.tail(3).norm());
       } else {
-        printf("r_r:  %.0e\n", r_cst.norm());
+        printf("r_r:  %.0e", r_cst.norm());
       }
-    } else {
-      printf("\n");
     }
   }
 }
@@ -462,13 +461,6 @@ void EnergyFunctional::getImuHessian(MatXX &H, VecX &b, MatXX &J_cst,
     return;
 
   int dim = CPARS + 1 + 29 * nFrames;
-
-  if (print) {
-    FrameHessian *fh0 = frames[0]->data;
-    printf("id: %d ba: %5.2f %5.2f %5.2f bg: %5.2f %5.2f %5.2f\n", fh0->frameID,
-           fh0->imu_bias[0], fh0->imu_bias[1], fh0->imu_bias[2],
-           fh0->imu_bias[3], fh0->imu_bias[4], fh0->imu_bias[5]);
-  }
 
   // get H and b
   H = MatXX::Zero(dim, dim);
@@ -498,16 +490,6 @@ void EnergyFunctional::getImuHessian(MatXX &H, VecX &b, MatXX &J_cst,
     J_cst.block(cur_idx, 0, step, dim) = J_cst_vec[i];
     r_cst.segment(cur_idx, step) = r_cst_vec[i];
     cur_idx += step;
-  }
-
-  if (print) {
-    if (setting_estimate_scale) {
-      printf("scale: %5.3f (%5.3f)\n\n", HCalib->getScaleScaled(),
-             HCalib->getScaleScaled(true));
-    } else {
-      printf("scale: %5.3f err: %5.3f\n\n", HCalib->getScaleScaled(),
-             frames[frames.size() - 2]->data->scale_error);
-    }
   }
 }
 
@@ -1076,6 +1058,7 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
     MatXX H_imu;
     VecX b_imu;
     getImuHessian(H_imu, b_imu, J_cst, r_cst, HCalib, false);
+    // getImuHessian(H_imu, b_imu, J_cst, r_cst, HCalib, iteration == 0);
 
     /************************* add dso H b *****************************/
     expandHbtoFitImu(HFinal_top, bFinal_top);
@@ -1128,7 +1111,7 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
     dim += cdim;
 
     /***************** remove unconstraint states **********************/
-    int vi = CPARS + setting_estimate_scale;
+    int vi = CPARS + (setting_enable_scale_opt ? 0 : 1);
     for (int i = 0; i < nFrames; i++) {
       int fi = CPARS + 1 + 29 * i;
       int vs = frames[i]->data->spline_valid ? 29 : 14;
@@ -1169,7 +1152,7 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda,
     x_dso.head(CPARS) = x.head(CPARS);
     int vi = CPARS;
     HCalib->scale_step = 0;
-    if (setting_estimate_scale) {
+    if (!setting_enable_scale_opt) {
       HCalib->scale_step = -x(vi);
       vi += 1;
     }

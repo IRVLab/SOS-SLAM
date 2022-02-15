@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ class ScaleOptimizer {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-  ScaleOptimizer(int w, int h, const std::vector<double> &tfm_vec,
+  ScaleOptimizer(int w, int h, const std::vector<double> &tfm_cam1_cam0,
                  const Mat33f &K1);
   ~ScaleOptimizer();
 

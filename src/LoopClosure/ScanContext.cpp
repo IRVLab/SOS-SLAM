@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -53,43 +53,54 @@ void ScanContext::process_scan(int cur_frame_id, const dso::SE3 &cur_wc,
   }
 }
 
-void ScanContext::getGravityByPCA(const std::vector<Eigen::Vector3d> &pts,
-                                  Mat33 &rot_ned_cam) {
-  double mx(0), my(0), mz(0);
+void ScanContext::getAlignTfmByPCA(const std::vector<Eigen::Vector3d> &pts,
+                                   Mat44 &tfm_ned_cam) {
+  Vec3 center;
   for (auto &pc : pts) {
-    mx += pc(0);
-    my += pc(1);
-    mz += pc(2);
+    center += pc;
   }
-  mx /= pts.size();
-  my /= pts.size();
-  mz /= pts.size();
+  center /= pts.size();
 
   // normalize pts (zero mean)
   Eigen::MatrixXd pts_mat(pts.size(), 3);
   for (size_t i = 0; i < pts.size(); i++) {
-    pts_mat(i, 0) = pts[i](0) - mx;
-    pts_mat(i, 1) = pts[i](1) - my;
-    pts_mat(i, 2) = pts[i](2) - mz;
+    pts_mat.row(i) = pts[i] - center;
   }
 
   // PCA
   auto cov = pts_mat.transpose() * pts_mat;
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(cov);
-  Vec3 g_in_cam = es.eigenvectors().col(0);
-  if (g_in_cam.sum() < 0) {
-    g_in_cam = -g_in_cam;
-  }
 
   // compute the rotation matrix
-  double roll = std::atan2(g_in_cam(0), g_in_cam(2));
-  double sr = std::sin(roll);
-  double cr = std::cos(roll);
-  double pitch = std::atan2(-g_in_cam(1), g_in_cam(0) / sr);
-  double sp = std::sin(pitch);
-  double cp = std::cos(pitch);
-  rot_ned_cam << -sr * sp, -cp, -cr * sp, -cr, 0, sr, g_in_cam(0), g_in_cam(1),
-      g_in_cam(2);
+  Vec3 rot_cam_nedx, rot_cam_nedy, rot_cam_nedz;
+  rot_cam_nedz = tfm_ned_cam.block<1, 3>(2, 0);
+  if (!setting_enable_imu) {
+    rot_cam_nedz = es.eigenvectors().col(0);
+    if (rot_cam_nedz.sum() < 0) {
+      rot_cam_nedz = -rot_cam_nedz;
+    }
+  }
+
+  std::vector<Vec3> rot_cam_nedy_candi = {
+      es.eigenvectors().col(1), -es.eigenvectors().col(1),
+      es.eigenvectors().col(2), -es.eigenvectors().col(2)};
+  rot_cam_nedy = rot_cam_nedy_candi[0];
+  for (int i = 1; i < 4; i++) {
+    if (rot_cam_nedy(0) < rot_cam_nedy_candi[i](0)) { // dot prod [1 0 0]
+      rot_cam_nedy = rot_cam_nedy_candi[i];
+    }
+  }
+  rot_cam_nedy = rot_cam_nedy - rot_cam_nedz.dot(rot_cam_nedy) * rot_cam_nedz;
+  rot_cam_nedy.normalize();
+
+  rot_cam_nedx = rot_cam_nedy.cross(rot_cam_nedz);
+
+  tfm_ned_cam.setIdentity();
+  tfm_ned_cam.block<1, 3>(0, 0) = rot_cam_nedx;
+  tfm_ned_cam.block<1, 3>(1, 0) = rot_cam_nedy;
+  tfm_ned_cam.block<1, 3>(2, 0) = rot_cam_nedz;
+  tfm_ned_cam.topRightCorner<3, 1>() =
+      -tfm_ned_cam.topLeftCorner<3, 3>() * center;
 }
 
 void ScanContext::process_scan_forward(
@@ -157,11 +168,10 @@ void ScanContext::process_scan_forward(
   }
 
   // mark tfm_sc_rig
-  Mat33 rot_ned_cam = cur_wc.rotationMatrix();
-  if (!setting_enable_imu) {
-    getGravityByPCA(pts_spherical, rot_ned_cam);
-  }
-  tfm_sc_rig = g2o::SE3Quat(rot_ned_cam, Eigen::Vector3d::Zero());
+  Mat44 tfm_ned_cam = cur_wc.matrix();
+  getAlignTfmByPCA(pts_spherical, tfm_ned_cam);
+  tfm_sc_rig = g2o::SE3Quat(tfm_ned_cam.topLeftCorner<3, 3>(),
+                            tfm_ned_cam.topRightCorner<3, 1>());
 
   // update nearby pts
   ptsNearby = new_pts_nearby;
@@ -170,10 +180,9 @@ void ScanContext::process_scan_forward(
 void ScanContext::process_scan_downward(const dso::SE3 &cur_wc,
                                         std::vector<Eigen::Vector3d> &pts_sc,
                                         g2o::SE3Quat &tfm_sc_rig) {
-  Mat33 rot_ned_cam = cur_wc.rotationMatrix();
-  if (!setting_enable_imu) {
-    getGravityByPCA(pts_sc, rot_ned_cam);
-  }
+  Mat44 tfm_ned_cam = cur_wc.matrix();
+  getAlignTfmByPCA(pts_sc, tfm_ned_cam);
+  Mat33 rot_ned_cam = tfm_ned_cam.topLeftCorner<3, 3>();
 
   // rotate points into NED frame
   for (auto &pt : pts_sc) {
@@ -239,7 +248,7 @@ bool ScanContext::generate(LoopFrame *frame, flann::Matrix<float> &ringkey) {
   MatXX sig_height = DBL_MAX * MatXX::Ones(NUM_S, NUM_R);
   for (const auto &pt_cam : frame->pts_sc) // loop on pts
   {
-    // projection from NED coordinate to polar coordinate
+    // projection from camera (rig) coordinate to NED coordinate
     Eigen::Vector3d pt_ned = frame->tfm_sc_rig * pt_cam;
     double i_n = pt_ned(0);
     double i_e = pt_ned(1);
@@ -252,67 +261,48 @@ bool ScanContext::generate(LoopFrame *frame, flann::Matrix<float> &ringkey) {
       theta -= 2.0 * M_PI;
     int si = theta / (2.0 * M_PI) * NUM_S;
     int ri = std::sqrt(i_n * i_n + i_e * i_e) / setting_lidar_range * NUM_R;
+    if (ri >= NUM_R) // happens because PCA translated the points
+      continue;
+
     assert(si < NUM_S);
     assert(ri < NUM_R);
-
     sig_height(si, ri) = std::min(sig_height(si, ri), i_d);
   }
 
-  double sig_norm = 0.0; // signature norm
-  double sig_si_sum = DBL_MAX;
-  int sig_si = -1; // the most siginificant si for yaw alignment
+  Eigen::VectorXd sig_norm_si = Eigen::VectorXd::Zero(NUM_S);
+  double ave_height = 0.0;
   for (int i = 0; i < NUM_S; i++) {
-    double si_sum = 0.0;
-    bool si_valid = false;
     for (int j = 0; j < NUM_R; j++) {
       if (sig_height(i, j) < DBL_MAX) {
         ringkey[0][j]++; // calculate ringkey
-        si_sum += sig_height(i, j) * sig_height(i, j);
-        si_valid = true;
-      }
-    }
-    if (si_valid) {
-      sig_norm += si_sum;
-      if (sig_si_sum > si_sum) {
-        sig_si_sum = si_sum;
-        sig_si = i;
+        sig_norm_si(i) += sig_height(i, j) * sig_height(i, j);
+        ave_height += sig_height(i, j);
       }
     }
   }
-  sig_norm = std::sqrt(sig_norm);
+  sig_norm_si = sig_norm_si.cwiseSqrt();
+  ave_height /= frame->signature.size();
 
   // normalize ringkey
   for (int i = 0; i < NUM_R; i++) {
     ringkey[0][i] /= NUM_S;
   }
 
-  // modify tfm_sc_rig
-  Eigen::Matrix3d rot_align(
-      Eigen::AngleAxisd(-sig_si / NUM_S * 2 * M_PI, Eigen::Vector3d::UnitZ()));
-  frame->tfm_sc_rig =
-      g2o::SE3Quat(rot_align, Eigen::Vector3d::Zero()) * frame->tfm_sc_rig;
-
   // get the aligned and normalized signature
-  assert(sig_si >= 0);
-  double ave_height = 0.0;
+  double var_height = 0.0;
   for (int i = 0; i < NUM_S; i++) {
     for (int j = 0; j < NUM_R; j++) {
       if (sig_height(i, j) < DBL_MAX) {
-        int aligned_i = (i >= sig_si ? (i - sig_si) : (i + NUM_S - sig_si));
         frame->signature.push_back(
-            {aligned_i * NUM_R + j, sig_height(i, j) / sig_norm});
-        ave_height += sig_height(i, j);
+            {i * NUM_R + j, sig_height(i, j) / sig_norm_si(i)});
+
+        double dh = sig_height(i, j) - ave_height;
+        var_height += dh * dh;
       }
     }
   }
-  ave_height /= frame->signature.size();
-
-  double var_height = 0.0;
-  for (const auto &sig : frame->signature) {
-    double dh = sig.second * sig_norm - ave_height;
-    var_height += dh * dh;
-  }
   var_height /= frame->signature.size();
+
   // std::cout << std::endl << "var_height " << var_height << std::endl;
   return var_height > VAR_HEIGHT_THRES;
 }
@@ -372,7 +362,7 @@ void ScanContext::search_sc(std::vector<std::pair<int, double>> &signature,
       }
     }
 
-    float cur_diff = (1 - cur_prod) / 2.0;
+    float cur_diff = (1 - cur_prod / NUM_S) / 2.0;
     if (res_diff > cur_diff) {
       res_idx = candidate;
       res_diff = cur_diff;

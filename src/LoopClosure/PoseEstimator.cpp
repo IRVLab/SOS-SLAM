@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -465,7 +465,7 @@ bool PoseEstimator::estimate(const LoopFrame *cur_frame,
     aff_good = false;
 
   // 2. with small residual;
-  bool low_res = pose_error < RES_THRES;
+  bool low_res = pose_error < setting_loop_direct_thres;
 
   // 3. with high inner ratio;
   int inlier_percent = 100 * float(lastInners[0]) / pts.size();
@@ -477,7 +477,7 @@ bool PoseEstimator::estimate(const LoopFrame *cur_frame,
   // float r = tfm_se3.tail<3>().norm();
   // bool tfm_close = t < TRANS_THRES && r < ROT_THRES;
 
-  printf("direct: (%5.2f, %3d%%, %s)  ", pose_error, inlier_percent,
+  printf("direct: (%4.1f, %3d%%, %s)  ", pose_error, inlier_percent,
          aff_good ? "Y" : "N");
 
   // if (low_res && aff_good && !(enough_inlier && tfm_close)) {
@@ -538,6 +538,6 @@ bool PoseEstimator::icp(const std::vector<Eigen::Vector3d> &pts_source,
 
   icp_score = icp.getFitnessScore();
   printf("icp: %5.2f  ", icp_score);
-  return icp_score < ICP_THRES;
+  return icp_score < setting_loop_icp_thres;
 }
 } // namespace dso

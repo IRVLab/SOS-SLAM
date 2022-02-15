@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -30,9 +30,6 @@
 #include <pcl/point_types.h>
 #include <pcl/registration/icp.h>
 
-#define ICP_THRES 0.5
-
-#define RES_THRES 10.0
 #define INNER_PERCENT 90
 // #define TRANS_THRES 3.0
 // #define ROT_THRES 0.2

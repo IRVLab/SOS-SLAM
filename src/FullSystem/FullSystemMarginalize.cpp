@@ -182,7 +182,6 @@ void FullSystem::marginalizeFrame(FrameHessian *frame) {
   // err = err / count^2 to emphasize on the count
   frame->dso_error = frame->dso_error / energy_count / energy_count;
   if (energy_count == 0) {
-    printf("dso_error has zero energy count!\n");
     frame->dso_error = 10 * last_dso_error;
   }
   last_dso_error = frame->dso_error;
@@ -193,7 +192,25 @@ void FullSystem::marginalizeFrame(FrameHessian *frame) {
     frame->dso_error = sqrtf(-1);
     prv_existing_kf_size = prevKFSize;
   }
-  frame->dso_error *= DSO_ERROR_SCALE;
+
+  // rescale points
+  double scale = HCalib.getScaleScaled();
+  if (frame->shell->trackingRef) {
+    scale = frame->shell->trackingRef->scale;
+  }
+  for (ImmaturePoint *p : frame->immaturePoints) {
+    p->idepth_max /= scale;
+    p->idepth_min /= scale;
+  }
+  for (PointHessian *p : frame->pointHessians) {
+    p->idepth_scaled /= scale;
+  }
+  for (PointHessian *p : frame->pointHessiansMarginalized) {
+    p->idepth_scaled /= scale;
+  }
+  for (PointHessian *p : frame->pointHessiansOut) {
+    p->idepth_scaled /= scale;
+  }
 
   {
     std::vector<FrameHessian *> v;

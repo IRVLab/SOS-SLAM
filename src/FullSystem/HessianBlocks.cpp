@@ -306,8 +306,8 @@ bool FrameHessian::initializeImu(
   }
 
   // scale and acc bias
-  double scale = 1.0;
-  if (setting_estimate_scale) {
+  double scale = HCalib->getScaleScaled();
+  if (!setting_enable_scale_opt) {
     // MatXX A_s_ba = MatXX::Zero(3 * all_imu_data.size(), 4);
     VecX A_s_ba = VecX::Zero(3 * all_imu_data.size());
     VecX b_s_ba = VecX::Zero(3 * all_imu_data.size());
@@ -332,18 +332,16 @@ bool FrameHessian::initializeImu(
     //     b_s_ba;
     scale = A_s_ba.dot(b_s_ba) / A_s_ba.dot(A_s_ba);
 
-    if (scale < 0) {
-      printf("initializeImu failed\n");
-      return false;
-    }
-
     HCalib->setScaleScaledZero(scale);
   }
 
-  if (setting_print_imu) {
-    printf("Init: scale: %.2f; ba: 0, 0, 0; bg: %.2f, %.2f, %.2f\n\n", scale,
-           gyro_bias(0), gyro_bias(1), gyro_bias(2));
+  if (scale < 0) {
+    printf("IMU initialization failed\n");
+    return false;
   }
+
+  printf("Initialization: scale: %.2f; ba: 0, 0, 0; bg: %.2f, %.2f, %.2f\n",
+         scale, gyro_bias(0), gyro_bias(1), gyro_bias(2));
 
   for (auto fh : frame_hessians) {
     fh->imu_bias.head(3).setConstant(0.0);
@@ -425,10 +423,8 @@ void CalibHessian::tryTrapScale() {
   if (var < setting_scale_trap_thres) {
     scale_trapped = true;
     scale_zero = scale_queue.mean();
-    if (setting_print_imu) {
-      printf("scale trapped to %8.5f\n", SCALE_SCALE * scale_zero);
-      std::cout << SCALE_SCALE * scale_queue.transpose() << std::endl;
-    }
+    std::cout << "scale trapped: " << SCALE_SCALE * scale_queue.transpose()
+              << " => " << SCALE_SCALE * scale_zero << std::endl;
   }
 }
 

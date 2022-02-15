@@ -151,8 +151,8 @@ extern float freeDebugParam4;
 extern float freeDebugParam5;
 
 extern bool setting_enable_imu;
-extern bool setting_estimate_scale;
-extern bool setting_print_imu;
+extern bool setting_enable_scale_opt;
+extern bool setting_enable_loop_closure;
 
 extern int setting_min_g_imu;
 extern float setting_maxImuInterval;
@@ -169,6 +169,9 @@ extern CamMode setting_cam_mode;
 extern float setting_scale_opt_thres;
 extern float setting_lidar_range;
 extern float setting_scan_context_thres;
+extern float setting_loop_direct_thres;
+extern bool setting_loop_force_icp;
+extern float setting_loop_icp_thres;
 
 void handleKey(char k);
 

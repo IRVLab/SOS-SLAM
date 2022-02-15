@@ -43,6 +43,7 @@ link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
 add_library(sos_slam_lib
+	src/SlamNode.cpp
 	src/FullSystem/FullSystem.cpp
 	src/FullSystem/FullSystemOptimize.cpp
 	src/FullSystem/FullSystemOptPoint.cpp
@@ -84,7 +85,4 @@ target_link_libraries(sos_slam_node
 	${PROJECT_SOURCE_DIR}/thirdparty/g2o/lib/libg2o_types_slam3d.so
 	${PROJECT_SOURCE_DIR}/thirdparty/g2o/lib/libg2o_solver_eigen.so
 	boost_system boost_thread cxsparse)
-
-catkin_install_python(PROGRAMS tests/gazebo/trajectory.py
-                      DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 

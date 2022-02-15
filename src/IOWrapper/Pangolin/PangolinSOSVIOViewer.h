@@ -1,4 +1,4 @@
-// Copyright (C) <2020> <Jiawei Mo, Junaed Sattar>
+// Copyright (C) <2022> <Jiawei Mo, Junaed Sattar>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -67,6 +67,13 @@ private:
   boost::thread runThread;
   bool running;
   int w, h;
+
+  // frame info
+  size_t frameID;
+  double scaleScale;
+  double scaleErrInit;
+  double imuBa;
+  double imuBg;
 
   // 3D model rendering
   boost::mutex model3dMutex;
