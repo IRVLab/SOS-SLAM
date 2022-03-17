@@ -113,7 +113,7 @@ void PangolinSOSVIOViewer::run() {
       .SetBounds(0.0, pangolin::Attach::Pix(20), 0.0, 1.0)
       .SetLayout(pangolin::LayoutEqualHorizontal);
 
-  pangolin::Var<int> settings_frameID("ui.frame_id", 0, 0, 0, false);
+  pangolin::Var<int> settings_frameID("ui.frame", 0, 0, 0, false);
   pangolin::Var<double> settings_scaleScale("ui.|scale", 0, 0, 0, false);
   pangolin::Var<double> settings_scaleErrInit(
       (setting_enable_scale_opt ? "ui.|scale_err" : "ui.|scale_init"), 0, 0, 0,

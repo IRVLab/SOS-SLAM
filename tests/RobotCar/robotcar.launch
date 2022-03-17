@@ -1,0 +1,17 @@
+<launch>
+  <arg name="bag" default=""/>
+  <arg name="start_frame" default="0"/>
+
+  <rosparam command="load" file="$(find sos_slam)/tests/RobotCar/calib.yaml" ns="sos_slam"/>
+
+  <node name="sos_slam" pkg="sos_slam" type="sos_slam_node" output="screen" required="true">
+    <param name="calib0" value="$(find sos_slam)/tests/RobotCar/camera0.txt" />
+    <param name="calib1" value="$(find sos_slam)/tests/RobotCar/camera1.txt" />
+    <param name="preset" value="2" />
+    <param name="bag" value="$(arg bag)" />
+    <param name="start_frame" value="$(arg start_frame)" />
+    <param name="scale_opt_thres" value="10" />
+    <param name="loop_lidar_range" value="40" />
+    <param name="loop_cam_mode" value="forward" />
+  </node>
+  </launch>

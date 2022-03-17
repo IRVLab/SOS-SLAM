@@ -1,0 +1,23 @@
+# ROS topics
+imu_topic: /imu0
+cam0_topic: /cam0/image_raw
+cam1_topic: /cam1/image_raw
+
+# transformation of IMU frame in the main camera 
+T_cam0_imu: [-0.9995,  0.0296, -0.0085,  0.0473,
+              0.0075, -0.0344, -0.9994, -0.0474,
+             -0.0299, -0.9990,  0.0342, -0.0682,
+              0.0000,  0.0000,  0.0000,  1.0000]
+
+# transformation of the main camera in the other camera frame
+T_cam1_cam0: [ 1.0000, -0.0008, -0.0007, -0.1011,
+               0.0008,  0.9989, -0.0469, -0.0020,
+               0.0007,  0.0469,  0.9989, -0.0012,
+               0.0000,  0.0000,  0.0000,  1.0000]
+
+# IMU configuration
+rate_hz: 200
+accelerometer_noise_density: 0.0028     # m/s^1.5
+accelerometer_random_walk:   0.00086    # m/s^2.5
+gyroscope_noise_density:     0.00016    # rad/s^0.5
+gyroscope_random_walk:       0.000022   # rad/s^1.5

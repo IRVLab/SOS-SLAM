@@ -1,0 +1,20 @@
+<launch>
+  <arg name="bag" default=""/>
+  <arg name="start_frame" default="0"/>
+
+  <rosparam command="load" file="$(find sos_slam)/tests/TUMVI/calib.yaml" ns="sos_slam"/>
+
+  <node name="sos_slam" pkg="sos_slam" type="sos_slam_node" output="screen" required="true">
+    <param name="mode" value="0" />
+    <param name="calib0" value="$(find sos_slam)/tests/TUMVI/camera0.txt" />
+    <param name="calib1" value="$(find sos_slam)/tests/TUMVI/camera1.txt" />
+    <param name="vignette0" value="$(find sos_slam)/calibs/TUMVI/vignette0.png" />
+    <param name="vignette1" value="$(find sos_slam)/calibs/TUMVI/vignette1.png" />
+    <param name="gamma0" value="$(find sos_slam)/calibs/TUMVI/pcalib0.txt" />
+    <param name="gamma1" value="$(find sos_slam)/calibs/TUMVI/pcalib1.txt" />
+    <param name="bag" value="$(arg bag)" />
+    <param name="start_frame" value="$(arg start_frame)" />
+    <param name="scale_opt_thres" value="10" />
+    <param name="weight_imu_dso" value="0.1" />
+  </node>
+  </launch>

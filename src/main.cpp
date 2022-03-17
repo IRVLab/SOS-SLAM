@@ -155,7 +155,6 @@ int main(int argc, char **argv) {
   /* *********************** stereo camera parameters *********************** */
   nhPriv.param("scale_opt_thres", setting_scale_opt_thres, -1.0f);
   setting_enable_scale_opt = setting_scale_opt_thres > 0;
-
   std::vector<double> tfm_cam1_cam0;
   std::string cam1_topic, calib1, vignette1, gamma1;
   if (setting_enable_scale_opt) {
@@ -170,18 +169,21 @@ int main(int argc, char **argv) {
   nhPriv.param<std::string>("gamma1", gamma1, "");
 
   /* *********************** loop closure parameters ************************ */
-  std::string cam_mode;
-  nhPriv.param<std::string>("loop_cam_mode", cam_mode, "downward");
-  setting_cam_mode = (cam_mode == "downward") ? DOWNWARD_CAM : FORWARD_CAM;
   nhPriv.param("loop_lidar_range", setting_lidar_range, -1.0f);
-  nhPriv.param("scan_context_thres", setting_scan_context_thres, 0.1f);
   setting_enable_loop_closure = setting_lidar_range > 0;
   if (setting_enable_loop_closure) {
     if (!(setting_enable_imu || setting_enable_scale_opt)) {
       ROS_INFO("Loop closure for monocular VO is not implemented!");
       return -1;
     }
+    std::string cam_mode;
+    if (!nhPriv.getParam("loop_cam_mode", cam_mode)) {
+      ROS_INFO("Loop closure is enabled but camera mode is not set!");
+      return -1;
+    }
+    setting_cam_mode = (cam_mode == "downward") ? DOWNWARD_CAM : FORWARD_CAM;
   }
+  nhPriv.param("scan_context_thres", setting_scan_context_thres, 0.33f);
   nhPriv.param("loop_direc_thres", setting_loop_direct_thres, 10.0f);
   nhPriv.param("loop_force_icp", setting_loop_force_icp, false);
   nhPriv.param("loop_icp_thres", setting_loop_icp_thres, 1.5f);

@@ -26,11 +26,11 @@ catkin_make
 ```
 
 ## Usage
-1. Preparation
-- [Calibrate](https://github.com/ethz-asl/kalibr) your stereo visual-inertial rig and convert to [this format](https://github.com/IRVLab/SOS-SLAM/tree/main/calibs/Gazebo).
-    - Refer to [DSO](https://github.com/JakobEngel/dso) for more details of intrisic parameters ([cameraX.txt](https://github.com/IRVLab/SOS-SLAM/blob/main/calibs/Gazebo/camera0.txt)).
-    - Put a small number in [T_cam1_cam0[2,2]](https://github.com/IRVLab/SOS-SLAM/blob/main/calibs/Gazebo/calib.yaml#L15) for numerical stability if images are stereo pre-rectified. 
-- Create a [launch file](https://github.com/IRVLab/SOS-SLAM/blob/main/launch).
+1. Preparation (examples of popular datasets are [provided](https://github.com/IRVLab/SOS-SLAM/tree/main/tests))
+- [Calibrate](https://github.com/ethz-asl/kalibr) your stereo visual-inertial rig and convert to [this format](https://github.com/IRVLab/SOS-SLAM/tree/main/tests/EuRoC):
+    - Refer to [DSO](https://github.com/JakobEngel/dso) for more details of intrisic parameters ([cameraX.txt](https://github.com/IRVLab/SOS-SLAM/blob/main/tests/EuRoC/camera0.txt)).
+    - Put a small number in [T_cam1_cam0[2,2]](https://github.com/IRVLab/SOS-SLAM/blob/main/tests/EuRoC/calib.yaml#L15) for numerical stability if images are stereo pre-rectified. 
+- Create a [launch file](https://github.com/IRVLab/SOS-SLAM/blob/main/tests/EuRoC/euroc.launch):
     - **scale_opt_thres**: scale optimization accept threshold (e.g., 15.0), set -1 to disable scale optimization.
     - **weight_imu_dso**: relative weight between inertial and visual systems (e.g., 6.0), set -1 to ignore IMU measurements.
     - **loop_lidar_range**: imitated LiDAR scan range (e.g., 40.0 meters), set -1 to disable place recognition.

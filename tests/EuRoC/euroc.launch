@@ -2,11 +2,11 @@
   <arg name="bag" default="/home/jiawei/Workspace/data/EuRoC/mh1.bag"/>
   <arg name="start_frame" default="0"/>
 
-  <rosparam command="load" file="$(find sos_slam)/calibs/EuRoC/calib.yaml" ns="sos_slam"/>
+  <rosparam command="load" file="$(find sos_slam)/tests/EuRoC/calib.yaml" ns="sos_slam"/>
 
   <node name="sos_slam" pkg="sos_slam" type="sos_slam_node" output="screen" required="true">
-    <param name="calib0" value="$(find sos_slam)/calibs/EuRoC/camera0.txt" />
-    <param name="calib1" value="$(find sos_slam)/calibs/EuRoC/camera1.txt" />
+    <param name="calib0" value="$(find sos_slam)/tests/EuRoC/camera0.txt" />
+    <param name="calib1" value="$(find sos_slam)/tests/EuRoC/camera1.txt" />
     <param name="bag" value="$(arg bag)" />
     <param name="start_frame" value="$(arg start_frame)" />
     <param name="scale_opt_thres" value="12" />

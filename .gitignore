@@ -1,2 +1,5 @@
 thirdparty/g2o/build
 thirdparty/g2o/lib
+
+tests/Aqua
+tests/Gazebo

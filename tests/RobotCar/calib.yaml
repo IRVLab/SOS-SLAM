@@ -1,0 +1,8 @@
+# ROS topics
+cam0_topic: camera/left/image_raw
+cam1_topic: camera/right/image_raw
+
+T_cam1_cam0: [ 1.0000,  0.0000,  0.0000, -0.239983, 
+               0.0000,  1.0000,  0.0000,  0.0000,
+               0.0000,  0.0000,  1.0000,  0.0000001,
+               0.0000,  0.0000,  0.0000,  1.0000]

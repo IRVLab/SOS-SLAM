@@ -1,5 +1,4 @@
 # ROS topics
-imu_topic: /imu
 cam0_topic: /left/image_raw
 cam1_topic: /right/image_raw
 
