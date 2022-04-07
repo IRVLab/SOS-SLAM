@@ -337,6 +337,12 @@ void LoopHandler::run() {
                   pose_error_scaled,
                   SCALE_ERROR_SCALE * matched_frame->fh->scale_error));
 
+              // visualize loop closures
+              if (pangolinViewer) {
+                pangolinViewer->pushLoopClosure(
+                    {cur_frame->kf_id, matched_frame->kf_id});
+              }
+
               // run pose graph optimization
               t0 = std::chrono::steady_clock::now();
               optimize();

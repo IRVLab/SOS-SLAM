@@ -141,6 +141,11 @@ void PangolinSOSVIOViewer::run() {
     drawConstraints();
     lk3d.unlock();
 
+    // refresh loop closure visualization
+    boost::unique_lock<boost::mutex> lkLoop(loopClosureMutex);
+    drawLoopClosures();
+    lkLoop.unlock();
+
     openImagesMutex.lock();
     if (videoImgChanged)
       texVideo.Upload(internalVideoImg->data, GL_BGR, GL_UNSIGNED_BYTE);
@@ -198,6 +203,25 @@ void PangolinSOSVIOViewer::drawConstraints() {
         (float)keyframesById[keyframesIdSorted[i]]->tfmCToW.translation()[2]);
   }
   glEnd();
+}
+
+void PangolinSOSVIOViewer::drawLoopClosures() {
+  float colorGreen[3] = {0, 1, 0};
+  glColor3f(colorGreen[0], colorGreen[1], colorGreen[2]);
+  glLineWidth(6);
+
+  for (unsigned int i = 0; i < loopClosures.size(); i++) {
+    glBegin(GL_LINE_STRIP);
+    glVertex3f(
+        (float)keyframesById[loopClosures[i].first]->tfmCToW.translation()[0],
+        (float)keyframesById[loopClosures[i].first]->tfmCToW.translation()[1],
+        (float)keyframesById[loopClosures[i].first]->tfmCToW.translation()[2]);
+    glVertex3f(
+        (float)keyframesById[loopClosures[i].second]->tfmCToW.translation()[0],
+        (float)keyframesById[loopClosures[i].second]->tfmCToW.translation()[1],
+        (float)keyframesById[loopClosures[i].second]->tfmCToW.translation()[2]);
+    glEnd();
+  }
 }
 
 void PangolinSOSVIOViewer::publishKeyframes(std::vector<FrameHessian *> &frames,
@@ -271,6 +295,12 @@ void PangolinSOSVIOViewer::drawLidar() {
     glVertex3f(lidarPts[i](0), lidarPts[i](1), lidarPts[i](2));
   }
   glEnd();
+}
+
+void PangolinSOSVIOViewer::pushLoopClosure(
+    std::pair<size_t, size_t> new_loop_pair) {
+  boost::unique_lock<boost::mutex> lk(loopClosureMutex);
+  loopClosures.push_back(new_loop_pair);
 }
 
 void PangolinSOSVIOViewer::pushLiveFrame(FrameHessian *image) {

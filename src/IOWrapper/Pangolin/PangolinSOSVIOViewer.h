@@ -53,6 +53,8 @@ public:
 
   void refreshLidarData(const std::vector<Eigen::Vector3d> &pts, size_t cur_sz);
 
+  void pushLoopClosure(std::pair<size_t, size_t> new_loop_pair);
+
   virtual void pushLiveFrame(FrameHessian *image) override;
 
   virtual void pushDepthImage(MinimalImageB3 *image) override;
@@ -61,6 +63,8 @@ public:
 
 private:
   void drawConstraints();
+
+  void drawLoopClosures();
 
   void drawLidar();
 
@@ -91,6 +95,10 @@ private:
   bool videoImgChanged;
   MinimalImageB3 *internalKFImg;
   bool KFImgChanged;
+
+  // loop closure rendering
+  boost::mutex loopClosureMutex;
+  std::vector<std::pair<size_t, size_t>> loopClosures;
 };
 
 } // namespace IOWrap
